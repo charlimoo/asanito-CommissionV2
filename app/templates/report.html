@@ -14,13 +14,13 @@
         <p class="text-muted">نتایج بر اساس فایل: <strong>{{ run.filename }}</strong> | دوره: <strong>{{ run.report_period }}</strong></p>
     </div>
     <div>
-        <a id="pdfExportLink" 
+        <!-- <a id="pdfExportLink" 
             href="{{ url_for('main.export_pdf', run_id=run.id) }}" 
             data-base-url="{{ url_for('main.export_pdf', run_id=run.id) }}" 
             class="btn btn-danger" 
             target="_blank">
                 دانلود PDF
-        </a>
+        </a> -->
         <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">محاسبه جدید</a>
     </div>
 </div>
