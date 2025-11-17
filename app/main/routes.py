@@ -158,67 +158,67 @@ def view_report(run_id):
         person_results = PersonResult.query.filter_by(calculation_run_id=run.id).all()
         return render_template('summary_report.html', run=run, person_results=person_results)
 
-# @bp.route('/report/<int:run_id>/export/pdf')
-# def export_pdf(run_id):
-#     """Generates and serves a PDF report for a given calculation run using pdfkit."""
-#     run = CalculationRun.query.get_or_404(run_id)
-#     if not run.detailed_results_json:
-#         flash('اطلاعات دقیق برای ساخت PDF یافت نشد.', 'danger')
-#         return redirect(url_for('main.view_report', run_id=run_id))
+@bp.route('/report/<int:run_id>/export/pdf')
+def export_pdf(run_id):
+    """Generates and serves a PDF report for a given calculation run using pdfkit."""
+    run = CalculationRun.query.get_or_404(run_id)
+    if not run.detailed_results_json:
+        flash('اطلاعات دقیق برای ساخت PDF یافت نشد.', 'danger')
+        return redirect(url_for('main.view_report', run_id=run_id))
     
-#     try:
-#         results = json.loads(run.detailed_results_json)
-#         aggregated_results = _perform_frontend_aggregation(results)
-#         # --- THIS IS THE NEW FILTERING LOGIC ---
-#         filtered_people_str = request.args.get('filter')
-#         if filtered_people_str:
-#             filtered_people = filtered_people_str.split(',')
-#             filtered_results = {}
-#             for month_key, month_data in aggregated_results.items():
-#                 # Copy top-level month data
-#                 filtered_month = month_data.copy()
-#                 filtered_month['persons'] = {}
+    try:
+        results = json.loads(run.detailed_results_json)
+        aggregated_results = _perform_frontend_aggregation(results)
+        # --- THIS IS THE NEW FILTERING LOGIC ---
+        filtered_people_str = request.args.get('filter')
+        if filtered_people_str:
+            filtered_people = filtered_people_str.split(',')
+            filtered_results = {}
+            for month_key, month_data in aggregated_results.items():
+                # Copy top-level month data
+                filtered_month = month_data.copy()
+                filtered_month['persons'] = {}
                 
-#                 # Only include people who are in the filter list
-#                 for person_name, person_data in month_data.get('persons', {}).items():
-#                     if person_name in filtered_people:
-#                         filtered_month['persons'][person_name] = person_data
+                # Only include people who are in the filter list
+                for person_name, person_data in month_data.get('persons', {}).items():
+                    if person_name in filtered_people:
+                        filtered_month['persons'][person_name] = person_data
                 
-#                 # Only add the month to the final results if it contains filtered people
-#                 if filtered_month['persons']:
-#                     filtered_results[month_key] = filtered_month
-#             results_to_render = filtered_results
+                # Only add the month to the final results if it contains filtered people
+                if filtered_month['persons']:
+                    filtered_results[month_key] = filtered_month
+            results_to_render = filtered_results
             
-#             # Use the filtered results for rendering
-#             results_to_render = filtered_results
-#         else:
-#             # If no filter is provided, use the original full results
-#             results_to_render = aggregated_results
-#         # --- END OF FILTERING LOGIC ---
+            # Use the filtered results for rendering
+            results_to_render = filtered_results
+        else:
+            # If no filter is provided, use the original full results
+            results_to_render = aggregated_results
+        # --- END OF FILTERING LOGIC ---
 
-#         html_string = render_template(
-#             'report_pdf.html', 
-#             detailed_report=results_to_render, 
-#             filename=run.filename
-#         )
+        html_string = render_template(
+            'report_pdf.html', 
+            detailed_report=results_to_render, 
+            filename=run.filename
+        )
         
-#         path_wkhtmltopdf = current_app.config.get('WKHTMLTOPDF_PATH')
-#         config = pdfkit.configuration(wkhtmltopdf=path_wkhtmltopdf)
-#         options = {'page-size': 'A4', 'margin-top': '0.75in', 'margin-right': '0.75in', 'margin-bottom': '0.75in', 'margin-left': '0.75in', 'encoding': "UTF-8", 'no-outline': None}
+        path_wkhtmltopdf = current_app.config.get('WKHTMLTOPDF_PATH')
+        config = pdfkit.configuration(wkhtmltopdf=path_wkhtmltopdf)
+        options = {'page-size': 'A4', 'margin-top': '0.75in', 'margin-right': '0.75in', 'margin-bottom': '0.75in', 'margin-left': '0.75in', 'encoding': "UTF-8", 'no-outline': None}
 
-#         pdf = pdfkit.from_string(html_string, False, configuration=config, options=options)
-#         pdf_filename = f"commission_report_{run.id}_{run.report_period.replace(' ', '')}.pdf"
+        pdf = pdfkit.from_string(html_string, False, configuration=config, options=options)
+        pdf_filename = f"commission_report_{run.id}_{run.report_period.replace(' ', '')}.pdf"
 
-#         return Response(pdf, mimetype="application/pdf", headers={"Content-Disposition": f"attachment;filename={pdf_filename}"})
+        return Response(pdf, mimetype="application/pdf", headers={"Content-Disposition": f"attachment;filename={pdf_filename}"})
 
-#     except FileNotFoundError:
-#         current_app.logger.error(f"wkhtmltopdf not found at path: {current_app.config.get('WKHTMLTOPDF_PATH')}")
-#         flash('خطا: فایل اجرایی ساخت PDF یافت نشد. لطفاً مسیر wkhtmltopdf را در کانفیگ بررسی کنید.', 'danger')
-#         return redirect(url_for('main.view_report', run_id=run_id))
-#     except Exception as e:
-#         current_app.logger.error(f"PDF generation failed for run {run_id}: {e}", exc_info=True)
-#         flash('خطایی در هنگام ساخت فایل PDF رخ داد.', 'danger')
-#         return redirect(url_for('main.view_report', run_id=run_id))
+    except FileNotFoundError:
+        current_app.logger.error(f"wkhtmltopdf not found at path: {current_app.config.get('WKHTMLTOPDF_PATH')}")
+        flash('خطا: فایل اجرایی ساخت PDF یافت نشد. لطفاً مسیر wkhtmltopdf را در کانفیگ بررسی کنید.', 'danger')
+        return redirect(url_for('main.view_report', run_id=run_id))
+    except Exception as e:
+        current_app.logger.error(f"PDF generation failed for run {run_id}: {e}", exc_info=True)
+        flash('خطایی در هنگام ساخت فایل PDF رخ داد.', 'danger')
+        return redirect(url_for('main.view_report', run_id=run_id))
 
 # --- Admin Panel Routes ---
 

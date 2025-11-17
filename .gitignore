@@ -84,8 +84,6 @@ nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
-migrations/
-/migrations
 # --- Docker ---
 # Ignore Docker-specific files if they are generated locally and not part of the repo
 docker-compose.override.yml

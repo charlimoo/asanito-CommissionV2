@@ -36,7 +36,7 @@
                 <li>{{ person_data.bracket_range_str }}</li>
                 <hr>
                 <li>پورسانت اصلی: <strong>{{ (person_data.total_commission - person_data.get('additional_bonus', 0))|to_persian_int }} تومان</strong></li>
-                <li>پاداش: <strong>{{ person_data.get('additional_bonus', 0)|to_persian_int }} تومان</strong></li>
+                <li> پاداش: <strong>{{ person_data.get('additional_bonus', 0)|to_persian_int }} تومان</strong></li>
                 <li>پورسانت وصول نشده: <strong>{{ person_data.unpaid_commission|to_persian_int }} تومان</strong></li>
                 <hr>
                 <li>مجموع پورسانت قابل پرداخت ماه: <strong>{{ person_data.total_commission|to_persian_int }} تومان</strong></li>
