@@ -1,0 +1,10 @@
+flask db init
+flask db migrate
+flask db upgrade
+flask seed
+python run.py
+
+pytest -s tests/test_engine.py
+pytest -s tests/test_real_data_audit.py
+pytest -s -m audit_rows tests/test_real_data_audit.py
+pytest -s -m trace_person tests/test_real_data_audit.py

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}تاریخچه محاسبات{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="display-6 fw-bold">تاریخچه محاسبات</h1>
+    <a href="{{ url_for('main.index') }}" class="btn btn-primary">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-circle-fill me-2" viewBox="0 0 16 16"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM8.5 4.5a.5.5 0 0 0-1 0v3h-3a.5.5 0 0 0 0 1h3v3a.5.5 0 0 0 1 0v-3h3a.5.5 0 0 0 0-1h-3v-3z"/></svg>
+        اجرای محاسبه جدید
+    </a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table id="historyTable" class="table table-hover">
+                <thead>
+                    <tr>
+                        <th scope="col">ID</th>
+                        <th scope="col">نام فایل</th>
+                        <th scope="col">دوره گزارش</th>
+                        <th scope="col">تاریخ بارگذاری</th>
+                        <th scope="col">عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for run in runs %}
+                    <tr>
+                        <td>{{ run.id }}</td>
+                        <td>{{ run.filename }}</td>
+                        <td>{{ run.report_period }}</td>
+                        <td>{{ run.upload_timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td>
+                            <a href="{{ url_for('main.view_report', run_id=run.id) }}" class="btn btn-info btn-sm">مشاهده گزارش</a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted">هیچ محاسبه‌ای تاکنون ذخیره نشده است.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function () {
+        $('#historyTable').DataTable({
+            "language": {
+                "processing": "در حال پردازش...", "search": "جستجو:",
+                "lengthMenu": "نمایش _MENU_ مورد", "info": "نمایش _START_ تا _END_ از _TOTAL_ مورد",
+                "infoEmpty": "نمایش 0 تا 0 از 0 مورد", "infoFiltered": "(فیلتر شده از _MAX_ مورد)",
+                "loadingRecords": "در حال بارگیری...", "zeroRecords": "هیچ موردی یافت نشد.",
+                "emptyTable": "هیچ داده‌ای در جدول وجود ندارد.",
+                "paginate": { "first": "اولین", "previous": "قبلی", "next": "بعدی", "last": "آخرین" },
+                "aria": { "sortAscending": ": فعال‌سازی برای مرتب‌سازی صعودی ستون", "sortDescending": ": فعال‌سازی برای مرتب‌سازی نزولی ستون" }
+            },
+            "order": [[ 3, "desc" ]] // Sort by the 4th column (date) descending by default
+        });
+    });
+</script>
+{% endblock %}

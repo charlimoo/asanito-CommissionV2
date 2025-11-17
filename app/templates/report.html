@@ -1,0 +1,471 @@
+{% extends "base.html" %}
+{% block title %}گزارش جامع پورسانت{% endblock %}
+
+{% block content %}
+{# Embed the complete frontend data as JSON for JavaScript to consume #}
+<script>
+    const frontendData = {{ frontend_data|tojson }};
+</script>
+
+{# Page Header #}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="display-6 fw-bold">گزارش جامع پورسانت</h1>
+        <p class="text-muted">نتایج بر اساس فایل: <strong>{{ run.filename }}</strong> | دوره: <strong>{{ run.report_period }}</strong></p>
+    </div>
+    <div>
+        <a id="pdfExportLink" 
+            href="{{ url_for('main.export_pdf', run_id=run.id) }}" 
+            data-base-url="{{ url_for('main.export_pdf', run_id=run.id) }}" 
+            class="btn btn-danger" 
+            target="_blank">
+                دانلود PDF
+        </a>
+        <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">محاسبه جدید</a>
+    </div>
+</div>
+
+{# 1. Person Filter Bar #}
+<div class="card shadow-sm mb-4">
+    <div class="card-header fw-bold">فیلتر افراد</div>
+    <div class="card-body" id="person-filter-container">
+        <div class="form-check form-check-inline">
+            <input class="form-check-input" type="checkbox" id="selectAllCheckbox" checked>
+            <label class="form-check-label" for="selectAllCheckbox"><b>انتخاب همه</b></label>
+        </div>
+        <hr>
+        {% for person in person_list %}
+        <div class="form-check form-check-inline">
+            <input class="form-check-input person-filter" type="checkbox" id="filter-{{ person.replace(' ', '-') }}" value="{{ person }}" checked>
+            <label class="form-check-label" for="filter-{{ person.replace(' ', '-') }}">{{ person }}</label>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+{# 2. Performance-over-Time Chart #}
+<div class="card shadow-sm mb-4">
+    <div class="card-header fw-bold">نمودار فروش ماهانه (مبنای پله)</div>
+    <div class="card-body">
+        <div style="height: 400px;">
+            <canvas id="performanceChart"></canvas>
+        </div>
+    </div>
+</div>
+
+{# 3. Overall Summary Table #}
+<div class="card shadow-sm mb-4">
+    <div class="card-header fw-bold">خلاصه پورسانت پرداختی کلی</div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-bordered">
+                <thead class="table-dark">
+                    <tr>
+                        <th>نام</th>
+                        <th>پورسانت محاسبه‌شده (اصل)</th>
+                        <th>پاداش</th>
+                        <th>مجموع قابل پرداخت</th>
+                        <th>مجموع پرداخت شده</th>
+                        <th class="table-success">باقی‌مانده</th>
+                    </tr>
+                </thead>
+                <tbody id="summary-table-body">
+                {% for summary in overall_summary|sort(attribute='person_name') %}
+                    <tr data-person-name="{{ summary.person_name }}">
+                        <td><strong>{{ summary.person_name }}</strong></td>
+                        <td>{{ summary.total_original_commission|to_persian_int }} تومان</td>
+                        <td>{{ summary.total_additional_bonus|to_persian_int }} تومان</td>
+                        <td>{{ summary.total_payable_commission|to_persian_int }} تومان</td>
+                        <td>{{ summary.total_paid_commission|to_persian_int }} تومان</td>
+                        <td class="fw-bold {% if summary.remaining_balance > 0 %}text-success{% elif summary.remaining_balance < 0 %}text-danger{% endif %}">{{ summary.remaining_balance|to_persian_int }} تومان</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{# Main Tab Navigation for Detailed Reports #}
+<ul class="nav nav-tabs nav-fill mb-3" id="reportTab" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="detailed-calc-tab" data-bs-toggle="tab" data-bs-target="#detailed-calc-pane" type="button" role="tab">گزارش محاسبات دقیق (ماه به ماه)</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="person-monthly-tab" data-bs-toggle="tab" data-bs-target="#person-monthly-pane" type="button" role="tab">گزارش ماهانه افراد</button>
+  </li>
+</ul>
+
+<div class="tab-content" id="reportTabContent">
+  {# 4. Deeply Nested, Step-by-Step Calculation View #}
+  <div class="tab-pane fade show active" id="detailed-calc-pane" role="tabpanel">
+    <div class="accordion" id="monthAccordion">
+        {% for month_key, month_data in detailed_report.items()|sort %}
+<div class="accordion-item shadow-sm mb-2 border-0 report-month-item">
+    <h2 class="accordion-header">
+        <button class="accordion-button collapsed fs-5" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-month-{{ month_key }}">
+            <div class="w-100 d-flex justify-content-between pe-3">
+                <span><strong class="ms-2">ماه {{ month_key }}</strong></span>
+                <span>کل فروش (خالص): <span class="badge bg-light text-dark">{{ month_data.total_net_sales|to_persian_int }} تومان</span></span>
+                <span>کل پورسانت: <span class="badge bg-success">{{ month_data.total_commission|to_persian_int }} تومان</span></span>
+            </div>
+        </button>
+    </h2>
+    <div id="collapse-month-{{ month_key }}" class="accordion-collapse collapse" data-bs-parent="#monthAccordion">
+        <div class="accordion-body bg-light">
+            {# 2. Add the Monthly Bonus Summary #}
+            {% if month_data.bonus_summary %}
+            {% set summary = month_data.bonus_summary %}
+            <div class="alert alert-info small">
+                <strong>خلاصه پاداش ماه:</strong><br>
+                - <strong>جمعی:</strong> هدف: {{ summary.collective_target|to_persian_int }} | مبلغ کل: <span class="fw-bold">{{ summary.collective_amount|to_persian_int }} تومان</span><br>
+                - <strong>فردی:</strong> هدف: {{ summary.individual_target|to_persian_int }} | مبلغ کل: <span class="fw-bold">{{ summary.individual_amount|to_persian_int }} تومان</span><br>
+                - <strong>تاپ سلر:</strong> {{ summary.top_seller_name }} ({{ summary.top_seller_sales|to_persian_int }}) | مبلغ کل: <span class="fw-bold">{{ summary.top_seller_amount|to_persian_int }} تومان</span>
+            </div>
+            {% endif %}
+
+            {% for person_name, person_data in month_data.persons.items()|sort %}
+            <div class="card mb-3 report-person-item" data-person-name="{{ person_name }}">
+                {# 3. Update the Person Summary Box #}
+                <div class="card-header bg-white">
+                    <div class="row">
+                        <div class="col-md-3"><strong>{{ person_name }}</strong></div>
+                        <div class="col-md-3">فروش (مبنای پله): <span class="badge bg-secondary">{{ person_data.bracket_base|to_persian_int }}</span></div>
+                        <div class="col-md-3">خالص فاکتور: <span class="badge bg-secondary">{{ person_data.total_net_sales|to_persian_int }}</span></div>
+                        <div class="col-md-3">{{ person_data.bracket_range_str }}</div>
+                    </div>
+                    <div class="row mt-1">
+                        <div class="col-md-3">پورسانت کل: <span class="badge bg-success">{{ person_data.total_commission|to_persian_int }}</span></div>
+                        <div class="col-md-3">پاداش: <span class="badge bg-info">{{ person_data.additional_bonus|to_persian_int }}</span></div>
+                        <div class="col-md-3">وصول نشده: <span class="badge bg-warning text-dark">{{ person_data.unpaid_commission|to_persian_int }}</span></div>
+                    </div>
+                </div>
+                <div class="accordion" id="personAccordion-{{ month_key }}-{{ person_name.replace(' ', '-') }}">
+                    {# 4. Update the Role Summary Box #}
+                    {% for role, summary in person_data.roles_summary.items()|sort %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-role-{{ month_key }}-{{ person_name.replace(' ', '-') }}-{{ role.replace(' ', '-') }}">
+                                <div class="w-100 d-flex justify-content-between pe-3">
+                                    <span>نقش: {{ role }}</span>
+                                    <span>فروش: <span class="badge bg-light text-dark">{{ summary.total_sales|to_persian_int }}</span></span>
+                                    <span>پورسانت: <span class="badge bg-primary">{{ summary.total_commission|to_persian_int }}</span></span>
+                                    <span>تعداد: <span class="badge bg-light text-dark">{{ summary.transaction_count }}</span></span>
+                                </div>
+                            </button>
+                        </h2>
+                        <div id="collapse-role-{{ month_key }}-{{ person_name.replace(' ', '-') }}-{{ role.replace(' ', '-') }}" class="accordion-collapse collapse" data-bs-parent="#personAccordion-{{ month_key }}-{{ person_name.replace(' ', '-') }}">
+                            <div class="accordion-body">
+                                {% for txn in person_data.transactions if txn.role == role %}
+                                {# 5. Update the Transaction Details view for clickable link #}
+                                <div class="card mb-2">
+                                    <div class="card-header small">
+                                        شرکت: <a href="{{ txn.invoice_link }}" target="_blank"><strong>{{ txn.company }}</strong></a> | پورسانت: <strong>{{ txn.payable_commission|to_persian_int }} تومان</strong>
+                                    </div>
+                                    <div class="card-body p-2"><pre class="mb-0" style="white-space: pre-wrap; font-size: 0.9em; text-align: right; direction: rtl;">{{ txn.calculation_details }}</pre></div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endfor %}
+    </div>
+  </div>
+
+  {# 5. Person-Centric Monthly Report View #}
+  <div class="tab-pane fade" id="person-monthly-pane" role="tabpanel">
+    <div class="accordion" id="personMonthlyAccordion">
+        {% for person_name, report_data in person_monthly_report.items()|sort %}
+        <div class="accordion-item shadow-sm mb-2 border-0 report-person-item" data-person-name="{{ person_name }}">
+            <h2 class="accordion-header"><button class="accordion-button collapsed fs-5" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-person-{{ person_name.replace(' ', '-') }}"><strong class="ms-2">{{ person_name }}</strong> | باقی‌مانده کل: <span class="badge bg-primary">{{ report_data.total_unpaid|to_persian_int }} تومان</span></button></h2>
+            <div id="collapse-person-{{ person_name.replace(' ', '-') }}" class="accordion-collapse collapse" data-bs-parent="#personMonthlyAccordion">
+                <div class="accordion-body">
+                    {% for month, data in report_data.months.items()|sort %}
+                    <div class="list-group-item list-group-item-action flex-column align-items-start mb-2 p-3 border rounded">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h5 class="mb-1">ماه {{ month }}</h5>
+                            <div>
+                                <small class="me-3">مبنای پله: {{ data.bracket_base|to_persian_int }} تومان</small>
+                                <small>کل خالص فاکتور: {{ data.total_net_sales|to_persian_int }} تومان</small> {# <-- ADDED #}
+                            </div>
+                        </div>
+                        <p class="mb-1"><span class="me-3">پورسانت اصل: <strong class="text-primary">{{ data.original_commission|to_persian_int }} تومان</strong></span><span class="me-3">پاداش: <strong class="text-info">{{ data.additional_bonus|to_persian_int }} تومان</strong></span></p>
+                        <p class="mb-0 fw-bold">مجموع پورسانت ماه: <span class="text-success">{{ data.total_commission|to_persian_int }} تومان</span></p>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">داده‌ای برای این شخص یافت نشد.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='js/report.js') }}"></script>
+
+<script>
+    $(document).ready(function () {
+        $('.transaction-table').DataTable({
+            "language": {
+    "emptyTable": "هیچ داده‌ای در جدول وجود ندارد",
+    "info": "نمایش _START_ تا _END_ از _TOTAL_ ردیف",
+    "infoEmpty": "نمایش 0 تا 0 از 0 ردیف",
+    "infoFiltered": "(فیلتر شده از _MAX_ ردیف)",
+    "infoThousands": ",",
+    "lengthMenu": "نمایش _MENU_ ردیف",
+    "processing": "در حال پردازش...",
+    "search": "جستجو:",
+    "zeroRecords": "رکوردی با این مشخصات پیدا نشد",
+    "paginate": {
+        "next": "بعدی",
+        "previous": "قبلی",
+        "first": "ابتدا",
+        "last": "انتها"
+    },
+    "aria": {
+        "sortAscending": ": فعال سازی نمایش به صورت صعودی",
+        "sortDescending": ": فعال سازی نمایش به صورت نزولی"
+    },
+    "autoFill": {
+        "cancel": "انصراف",
+        "fill": "پر کردن همه سلول ها با ساختار سیستم",
+        "fillHorizontal": "پر کردن سلول به صورت افقی",
+        "fillVertical": "پرکردن سلول به صورت عمودی"
+    },
+    "buttons": {
+        "collection": "مجموعه",
+        "colvis": "قابلیت نمایش ستون",
+        "colvisRestore": "بازنشانی قابلیت نمایش",
+        "copy": "کپی",
+        "copySuccess": {
+            "1": "یک ردیف داخل حافظه کپی شد",
+            "_": "%ds ردیف داخل حافظه کپی شد"
+        },
+        "copyTitle": "کپی در حافظه",
+        "pageLength": {
+            "-1": "نمایش همه ردیف‌ها",
+            "_": "نمایش %d ردیف",
+            "1": "نمایش 1 ردیف"
+        },
+        "print": "چاپ",
+        "copyKeys": "برای کپی داده جدول در حافظه سیستم کلید های ctrl یا ⌘ + C را فشار دهید",
+        "csv": "فایل CSV",
+        "pdf": "فایل PDF",
+        "renameState": "تغییر نام",
+        "updateState": "به روز رسانی",
+        "excel": "فایل اکسل",
+        "createState": "ایجاد وضعیت جدول",
+        "removeAllStates": "حذف همه وضعیت ها",
+        "removeState": "حذف",
+        "savedStates": "وضعیت های ذخیره شده",
+        "stateRestore": "بازگشت به وضعیت %d"
+    },
+    "searchBuilder": {
+        "add": "افزودن شرط",
+        "button": {
+            "0": "جستجو ساز",
+            "_": "جستجوساز (%d)"
+        },
+        "clearAll": "خالی کردن همه",
+        "condition": "شرط",
+        "conditions": {
+            "date": {
+                "after": "بعد از",
+                "before": "بعد از",
+                "between": "میان",
+                "empty": "خالی",
+                "not": "نباشد",
+                "notBetween": "میان نباشد",
+                "notEmpty": "خالی نباشد",
+                "equals": "برابر باشد با"
+            },
+            "number": {
+                "between": "میان",
+                "empty": "خالی",
+                "gt": "بزرگتر از",
+                "gte": "برابر یا بزرگتر از",
+                "lt": "کمتر از",
+                "lte": "برابر یا کمتر از",
+                "not": "نباشد",
+                "notBetween": "میان نباشد",
+                "notEmpty": "خالی نباشد",
+                "equals": "برابر باشد با"
+            },
+            "string": {
+                "contains": "حاوی",
+                "empty": "خالی",
+                "endsWith": "به پایان می رسد با",
+                "not": "نباشد",
+                "notEmpty": "خالی نباشد",
+                "startsWith": "شروع  شود با",
+                "notContains": "نباشد حاوی",
+                "notEndsWith": "پایان نیابد با",
+                "notStartsWith": "شروع نشود با",
+                "equals": "برابر باشد با"
+            },
+            "array": {
+                "empty": "خالی",
+                "contains": "حاوی",
+                "not": "نباشد",
+                "notEmpty": "خالی نباشد",
+                "without": "بدون",
+                "equals": "برابر باشد با"
+            }
+        },
+        "data": "اطلاعات",
+        "logicAnd": "و",
+        "logicOr": "یا",
+        "title": {
+            "0": "جستجو ساز",
+            "_": "جستجوساز (%d)"
+        },
+        "value": "مقدار",
+        "deleteTitle": "حذف شرط فیلتر",
+        "leftTitle": "شرط بیرونی",
+        "rightTitle": "شرط داخلی"
+    },
+    "select": {
+        "cells": {
+            "1": "1 سلول انتخاب شد",
+            "_": "%d سلول انتخاب شد"
+        },
+        "columns": {
+            "1": "یک ستون انتخاب شد",
+            "_": "%d ستون انتخاب شد"
+        },
+        "rows": {
+            "1": "1ردیف انتخاب شد",
+            "_": "%d  انتخاب شد"
+        }
+    },
+    "thousands": ",",
+    "searchPanes": {
+        "clearMessage": "همه را پاک کن",
+        "collapse": {
+            "0": "صفحه جستجو",
+            "_": "صفحه جستجو (٪ d)"
+        },
+        "count": "{total}",
+        "countFiltered": "{shown} ({total})",
+        "emptyPanes": "صفحه جستجو وجود ندارد",
+        "loadMessage": "در حال بارگیری صفحات جستجو ...",
+        "title": "فیلترهای فعال - %d",
+        "showMessage": "نمایش همه",
+        "collapseMessage": "بستن همه"
+    },
+    "loadingRecords": "در حال بارگذاری...",
+    "datetime": {
+        "previous": "قبلی",
+        "next": "بعدی",
+        "hours": "ساعت",
+        "minutes": "دقیقه",
+        "seconds": "ثانیه",
+        "amPm": [
+            "صبح",
+            "عصر"
+        ],
+        "months": {
+            "0": "ژانویه",
+            "1": "فوریه",
+            "10": "نوامبر",
+            "2": "مارچ",
+            "4": "می",
+            "6": "جولای",
+            "8": "سپتامبر",
+            "11": "دسامبر",
+            "3": "آوریل",
+            "5": "جون",
+            "9": "اکتبر",
+            "7": "اوت"
+        },
+        "unknown": "-",
+        "weekdays": [
+            "یکشنبه",
+            "دوشنبه",
+            "سه‌شنبه",
+            "چهارشنبه",
+            "پنجشنبه",
+            "جمعه",
+            "شنبه"
+        ]
+    },
+    "editor": {
+        "close": "بستن",
+        "create": {
+            "button": "جدید",
+            "title": "ثبت جدید",
+            "submit": "ایجــاد"
+        },
+        "edit": {
+            "button": "ویرایش",
+            "title": "ویرایش",
+            "submit": "به روز رسانی"
+        },
+        "remove": {
+            "button": "حذف",
+            "title": "حذف",
+            "submit": "حذف",
+            "confirm": {
+                "_": "آیا از حذف %d خط اطمینان دارید؟",
+                "1": "آیا از حذف یک خط اطمینان دارید؟"
+            }
+        },
+        "multi": {
+            "restore": "واگرد",
+            "noMulti": "این ورودی را می توان به صورت جداگانه ویرایش کرد، اما نه بخشی از یک گروه",
+            "title": "مقادیر متعدد",
+            "info": "مقادیر متعدد"
+        },
+        "error": {
+            "system": "خطایی رخ داده (اطلاعات بیشتر)"
+        }
+    },
+    "decimal": ".",
+    "stateRestore": {
+        "creationModal": {
+            "button": "ایجاد",
+            "columns": {
+                "search": "جستجوی ستون",
+                "visible": "وضعیت نمایش ستون"
+            },
+            "name": "نام:",
+            "order": "مرتب سازی",
+            "paging": "صفحه بندی",
+            "search": "جستجو",
+            "select": "انتخاب",
+            "title": "ایجاد وضعیت جدید",
+            "toggleLabel": "شامل:",
+            "scroller": "موقعیت جدول (اسکرول)",
+            "searchBuilder": "صفحه جستجو"
+        },
+        "emptyError": "نام نمیتواند خالی باشد.",
+        "removeConfirm": "آیا از حذف %s مطمئنید؟",
+        "removeJoiner": "و",
+        "renameButton": "تغییر نام",
+        "renameLabel": "نام جدید برای $s :",
+        "duplicateError": "وضعیتی با این نام از پیش ذخیره شده.",
+        "emptyStates": "هیچ وضعیتی ذخیره نشده",
+        "removeError": "حذف با خطا موماجه شد",
+        "removeSubmit": "حذف وضعیت",
+        "removeTitle": "حذف وضعیت جدول",
+        "renameTitle": "تغییر نام وضعیت"
+    }
+},
+            "paging": false, "info": false, "searching": false,
+            "order": [[ 4, "desc" ]]
+        });
+    });
+</script>
+{% endblock %}

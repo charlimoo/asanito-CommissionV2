@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}پنل مدیریت{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="display-6 fw-bold">پنل مدیریت قوانین</h1>
+    <div>
+        <a href="{{ url_for('main.admin_settings') }}" class="btn">تنظیمات</a>
+        <a href="{{ url_for('main.admin_logout') }}" class="btn btn-outline-danger">خروج</a>
+    </div>
+</div>
+
+<!-- Commission Rules Section -->
+<div class="card shadow-sm mb-5">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-bank me-2" viewBox="0 0 16 16"><path d="m8 0 6.61 3h.89a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5H15v7a.5.5 0 0 1 .485.38l.5 2a.498.498 0 0 1-.485.62H.5a.498.498 0 0 1-.485-.62l.5-2A.501.501 0 0 1 1 13V6H.5a.5.5 0 0 1-.5-.5v-2A.5.5 0 0 1 .5 3h.89L8 0zM3.777 3h8.447L8 1 3.777 3zM2 6v7h1V6H2zm2 0v7h2.5V6H4zm3.5 0v7h1V6h-1zm2 0v7H12V6H9.5zM13 6v7h1V6h-1zm2-1V4H1v1h14zM.25 13.5h15.5l-.25-1H.5l-.25 1z"/></svg>
+            قوانین پله‌های پورسانت
+        </h5>
+        <a href="{{ url_for('main.add_rule') }}" class="btn btn-primary btn-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-lg me-1" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z"/></svg>
+            افزودن قانون جدید
+        </a>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-bordered">
+                <thead class="table-dark">
+                    <tr>
+                        <th scope="col">مدل همکاری</th>
+                        <th scope="col">فروش از (تومان)</th>
+                        <th scope="col">فروش تا (تومان)</th>
+                        <th scope="col">نرخ بازاریاب</th>
+                        <th scope="col">نرخ مذاکره کننده</th>
+                        <th scope="col">نرخ هماهنگ کننده</th>
+                        <th scope="col">عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rule in rules %}
+                    <tr>
+                        <td><span class="badge {% if rule.model_name == 'پورسانت خالص' %}bg-success{% else %}bg-info text-dark{% endif %}">{{ rule.model_name }}</span></td>
+                        <td>{{ rule.min_sales|to_persian_int }}</td>
+                        <td>{{ rule.max_sales|to_persian_int }}</td>
+                        <td>{{ (rule.marketer_rate * 100)|round(2) }}%</td>
+                        <td>{{ (rule.negotiator_rate * 100)|round(2) }}%</td>
+                        <td>{{ (rule.coordinator_rate * 100)|round(2) }}%</td>
+                        <td>
+                            <a href="{{ url_for('main.edit_rule', rule_id=rule.id) }}" class="btn btn-warning btn-sm" title="ویرایش">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-pencil-fill" viewBox="0 0 16 16"><path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708l-3-3zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207l6.5-6.5zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.499.499 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11l.178-.178z"/></svg>
+                            </a>
+                            <form action="{{ url_for('main.delete_rule', rule_id=rule.id) }}" method="POST" class="d-inline" onsubmit="return confirm('آیا از حذف این قانون مطمئن هستید؟');">
+                                <button type="submit" class="btn btn-danger btn-sm" title="حذف">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash-fill" viewBox="0 0 16 16"><path d="M2.5 1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1H3v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V4h.5a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H10a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1H2.5zm3 4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 .5-.5zM8 5a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 .5-.5zm3 .5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 1 0z"/></svg>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted">هیچ قانونی تعریف نشده است.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

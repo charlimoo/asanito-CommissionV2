@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}بارگذاری فایل پورسانت{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10 col-xl-8">
+        
+        <div class="text-center mb-5">
+            <h1 class="display-5 fw-bold">محاسبه‌گر پورسانت فروش</h1>
+            <p class="lead text-muted">فایل اکسل خود را بر اساس آخرین قالب بارگذاری کنید تا محاسبات انجام شود.</p>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header card-header-icon bg-primary text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-cloud-arrow-up-fill icon" viewBox="0 0 16 16"><path d="M8 2a5.53 5.53 0 0 0-3.594 1.342c-.766.66-1.321 1.52-1.464 2.383C1.266 6.095 0 7.555 0 9.318 0 11.366 1.708 13 3.781 13h8.906C14.502 13 16 11.57 16 9.773c0-1.636-1.242-2.969-2.834-3.194C12.923 3.999 10.69 2 8 2zm2.354 5.146a.5.5 0 0 1-.708.708L8.5 6.707V10.5a.5.5 0 0 1-1 0V6.707L6.354 7.854a.5.5 0 1 1-.708-.708l2-2a.5.5 0 0 1 .708 0l2 2z"/></svg>
+                <h5 class="mb-0">بارگذاری فایل اکسل (.xlsx)</h5>
+            </div>
+            <div class="card-body p-4">
+                <form id="uploaderForm" action="{{ url_for('main.index') }}" method="post" enctype="multipart/form-data">
+                    <div class="uploader-box text-center">
+                        <div class="uploader-icon mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" class="bi bi-file-earmark-arrow-up" viewBox="0 0 16 16"><path d="M8.5 11.5a.5.5 0 0 1-1 0V7.707L6.354 8.854a.5.5 0 1 1-.708-.708l2-2a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1-.708.708L8.5 7.707V11.5z"/><path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2zM9.5 1.5v3A1.5 1.5 0 0 0 11 6h3V4.5h-2A1.5 1.5 0 0 1 9.5 3V1.5z"/></svg>
+                        </div>
+                        <input class="form-control" type="file" id="fileInput" name="file" accept=".xlsx" required>
+                        <label for="fileInput" class="form-label text-muted">یک فایل اکسل را انتخاب کنید یا اینجا بکشید</label>
+                    </div>
+                    <div class="d-grid mt-4">
+                        <button id="submitButton" type="submit" class="btn btn-primary btn-lg">
+                            <span id="buttonText">محاسبه کن</span>
+                            <span id="buttonSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+             <div class="card-header card-header-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-info-circle-fill icon" viewBox="0 0 16 16"><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm.93-9.412-1 4.705c-.07.34.029.533.304.533.194 0 .487-.07.686-.246l-.088.416c-.287.346-.92.598-1.465.598-.703 0-1.002-.422-.808-1.319l.738-3.468c.064-.293.006-.399-.287-.47l-.451-.081.082-.381 2.29-.287zM8 5.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>
+                <h5 class="mb-0">راهنما</h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">۱. همیشه از آخرین نسخه قالب اکسل استفاده کنید. برای دانلود قالب، روی دکمه زیر کلیک کنید.</p>
+                <p class="card-text">۲. مطمئن شوید تمام شیت‌های مورد نیاز (Sales data, Commissions paid, Renew, Additional commissions, Employee Models) در فایل شما موجود هستند.</p>
+                <p class="card-text">۳. تمام مقادیر پولی باید به **ریال** و بدون جداکننده هزارگان (کاما) وارد شوند.</p>
+                <a href="#" class="btn btn-outline-primary">دانلود آخرین قالب (.xlsx)</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}مدیریت تنظیمات کلی{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="display-6 fw-bold">مدیریت تنظیمات کلی</h1>
+    <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-outline-secondary">بازگشت به داشبورد</a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header"><h5 class="mb-0">قوانین و ثابت‌های برنامه</h5></div>
+    <div class="card-body">
+        <p class="text-muted">این مقادیر مستقیماً بر روی محاسبات تأثیر می‌گذارند. در ویرایش آن‌ها دقت کنید.</p>
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>کلید (Key)</th>
+                    <th>توضیحات</th>
+                    <th>مقدار</th>
+                    <th>عملیات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for setting in settings %}
+                <tr>
+                    <td><code>{{ setting.key }}</code></td>
+                    <td>{{ setting.description }}</td>
+                    <td><pre class="mb-0"><code>{{ setting.value }}</code></pre></td>
+                    <td>
+                        <a href="{{ url_for('main.edit_setting', setting_id=setting.id) }}" class="btn btn-warning btn-sm">ویرایش</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

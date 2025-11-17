@@ -1,0 +1,115 @@
+# ==============================================================================
+# Gitignore for Python / Flask / Docker Projects
+# ------------------------------------------------------------------------------
+# This file tells Git which files and directories to ignore in the project.
+# ==============================================================================
+
+# --- Python ---
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+# Usually these files are created by pyinstaller, if you use it.
+*.manifest
+*.spec
+
+# --- Virtual Environment ---
+# Ignore the virtual environment directory itself.
+# This prevents committing gigabytes of installed packages.
+venv/
+.venv/
+env/
+.env/
+ENV/
+.ENV/
+env.bak/
+venv.bak/
+
+# --- Instance Folder (CRITICAL) ---
+# This folder contains your secrets, database, and uploaded files.
+# It should NEVER be committed to version control.
+instance/
+/instance/
+
+# --- Secrets & Environment Variables ---
+# The .env file contains secrets like SECRET_KEY and ADMIN_PASSWORD.
+.env
+
+# --- Flask ---
+# Flask-Cache
+.webassets-cache
+
+# --- IDE / Editor specific ---
+# VSCode
+.vscode/
+# PyCharm
+.idea/
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# --- Testing ---
+# Pytest cache and reports
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+migrations/
+/migrations
+# --- Docker ---
+# Ignore Docker-specific files if they are generated locally and not part of the repo
+docker-compose.override.yml
+
+# --- OS-specific ---
+# macOS
+.DS_Store
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# --- Log files ---
+# Ignore any files with a .log extension.
+*.log
+logs/
+*.log.*
+
+# --- Excel/CSV files (Optional but Recommended) ---
+# Ignore any specific data files you upload for testing that shouldn't be in the repo.
+# Especially important if they contain sensitive or real customer data.
+*.xlsx
+*.csv
+#
+# You have 'tests/real_data.xlsx' in the repo. If this is for automated testing,
+# that's fine. But if it's sensitive, you should add it here and load it differently for tests.
+# For now, we will assume it's safe test data and not ignore it.

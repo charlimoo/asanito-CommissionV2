@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>گزارش پورسانت - {{ filename }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/print.css', _external=True) }}">
+</head>
+<body>
+    <div class="report-header">
+        <h1>گزارش جامع پورسانت</h1>
+        <p>فایل منبع: <strong>{{ filename }}</strong></p>
+        <p>تاریخ تهیه گزارش: {{ now.strftime('%Y-%m-%d %H:%M') }}</p>
+    </div>
+
+    {% for month_key, month_data in detailed_report.items()|sort %}
+        {% if month_data.persons %} {# Only show months that have data for the filtered people #}
+        <h2>ماه: {{ month_key }}</h2>
+
+        {% if month_data.bonus_summary %}
+        <div class="bonus-summary">
+            <h4>خلاصه پاداش ماه</h4>
+            <ul>
+                <li><strong>جمعی:</strong> هدف: {{ month_data.bonus_summary.collective_target|to_persian_int }} تومان | مبلغ کل: {{ month_data.bonus_summary.collective_amount|to_persian_int }} تومان</li>
+                <li><strong>فردی:</strong> هدف: {{ month_data.bonus_summary.individual_target|to_persian_int }} تومان | مبلغ کل: {{ month_data.bonus_summary.individual_amount|to_persian_int }} تومان</li>
+                <li><strong>تاپ سلر:</strong> {{ month_data.bonus_summary.top_seller_name }} (فروش: {{ month_data.bonus_summary.top_seller_sales|to_persian_int }}) | مبلغ کل: {{ month_data.bonus_summary.top_seller_amount|to_persian_int }} تومان</li>
+            </ul>
+        </div>
+        {% endif %}
+
+        {% for person_name, person_data in month_data.persons.items()|sort %}
+            <h3>{{ person_name }}</h3>
+            <ul class="summary-list">
+                <li>مدل همکاری: <strong>{{ person_data.model }}</strong></li>
+                <li>مبنای پله (Bracket Base): <strong>{{ person_data.bracket_base|to_persian_int }} تومان</strong></li>
+                <li>خالص فاکتورهای ماه: <strong>{{ person_data.total_net_sales|to_persian_int }} تومان</strong></li>
+                <li>{{ person_data.bracket_range_str }}</li>
+                <hr>
+                <li>پورسانت اصلی: <strong>{{ (person_data.total_commission - person_data.get('additional_bonus', 0))|to_persian_int }} تومان</strong></li>
+                <li>پاداش: <strong>{{ person_data.get('additional_bonus', 0)|to_persian_int }} تومان</strong></li>
+                <li>پورسانت وصول نشده: <strong>{{ person_data.unpaid_commission|to_persian_int }} تومان</strong></li>
+                <hr>
+                <li>مجموع پورسانت قابل پرداخت ماه: <strong>{{ person_data.total_commission|to_persian_int }} تومان</strong></li>
+            </ul>
+            
+            {% for role, summary in person_data.roles_summary.items()|sort %}
+            <h4>نقش: {{ role }}</h4>
+            <ul class="summary-list role-summary">
+                <li>مجموع فروش (مبنا): <strong>{{ summary.total_sales|to_persian_int }} تومان</strong></li>
+                <li>مجموع پورسانت: <strong>{{ summary.total_commission|to_persian_int }} تومان</strong></li>
+                <li>تعداد تراکنش‌ها: <strong>{{ summary.transaction_count }} مورد</strong></li>
+            </ul>
+            <table>
+                <thead>
+                    <tr><th>شرکت</th><th>مبنا (تومان)</th><th>نرخ</th><th>پورسانت (تومان)</th><th>باقی‌مانده</th></tr>
+                </thead>
+                <tbody>
+                    {% for txn in person_data.transactions if txn.role == role %}
+                    <tr>
+                        <td>{{ txn.company }}</td>
+                        <td>{{ txn.commission_base|to_persian_int }}</td>
+                        <td>{{ (txn.rate_used * 100)|round(2) }}%</td>
+                        <td><strong>{{ txn.payable_commission|to_persian_int }}</strong></td>
+                        <td>{{ txn.commission_remaining|to_persian_int }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endfor %}
+        {% endfor %}
+        {% endif %}
+    {% endfor %}
+</body>
+</html>

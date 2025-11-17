@@ -1,0 +1,42 @@
+# ==============================================================================
+# requirements.txt
+# ------------------------------------------------------------------------------
+# Lists all Python package dependencies for the Asanito Commission Calculator.
+# Install with: pip install -r requirements.txt
+# ==============================================================================
+
+# --- Core Flask Framework & Utilities ---
+Flask==2.2.2
+python-dotenv==0.21.0     # For loading environment variables from a .env file
+
+# --- Data Handling & Excel ---
+pandas==1.5.2             # For reading and processing Excel data
+openpyxl==3.0.10          # The engine pandas uses for modern .xlsx files
+numpy==1.26.4
+
+# --- Database (ORM and Migrations) ---
+Flask-SQLAlchemy==3.0.2   # The standard Flask ORM for database interaction
+SQLAlchemy==1.4.45        # Core ORM library (pinned for stability with Flask-SQLAlchemy 3.0.2)
+Flask-Migrate==4.0.4      # For handling database schema changes (migrations)
+alembic==1.9.2            # CORRECTED: Version compatible with Flask-Migrate 4.0.4
+
+# --- Web Forms (for Admin Panel) ---
+Flask-WTF==1.1.1          # For creating and validating secure web forms
+WTForms==3.0.1            # The library that powers Flask-WTF
+email-validator==1.3.0    # A dependency for WTForms' email validation
+
+# --- PDF Export ---
+pdfkit==0.6.1
+
+# --- Production Web Server ---
+gunicorn==20.1.0
+
+# --- Transitive Dependencies (Pinned for Stability) ---
+# These are packages installed by the libraries above. Pinning them prevents
+# unexpected breakages if a sub-dependency releases a breaking change.
+blinker==1.5
+click==8.1.3
+itsdangerous==2.1.2
+Jinja2==3.1.2
+MarkupSafe==2.1.1
+Werkzeug==2.2.2

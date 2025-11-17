@@ -1,0 +1,12 @@
+instance
+instance/uploads
+instance/uploads/real_data.xlsx
+instance/uploads/xlsx
+migrations
+migrations/versions
+migrations/versions/95e640c49ce9_.py
+migrations/alembic.ini
+migrations/env.py
+migrations/README
+migrations/script.py.mako
+.uipresets

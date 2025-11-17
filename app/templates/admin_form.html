@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8 col-md-10">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h4 class="mb-0">{{ title }}</h4>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST" action="" novalidate>
+                    {{ form.hidden_tag() }}
+                    
+                    {% for field in form if field.widget.input_type != 'hidden' and field.type != 'SubmitField' %}
+                        <div class="mb-3">
+                            {{ field.label(class="form-label fw-bold") }}
+                            
+                            {% if field.type == 'SelectField' %}
+                                {{ field(class="form-select" + (" is-invalid" if field.errors else "")) }}
+                            {% else %}
+                                {{ field(class="form-control" + (" is-invalid" if field.errors else ""), autocomplete="off") }}
+                            {% endif %}
+
+                            {% if field.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in field.errors %}
+                                        <span>{{ error }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                    
+                    <div class="mt-4">
+                        {{ form.submit(class="btn btn-primary px-5") }}
+                        <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-secondary">انصراف</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

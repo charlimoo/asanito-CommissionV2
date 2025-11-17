@@ -1,0 +1,162 @@
+/* ==============================================================================
+ * app/static/css/print.css
+ * ------------------------------------------------------------------------------
+ * Stylesheet for PDF generation and print-friendly views.
+ * ============================================================================== */
+
+/* 
+ * We embed the font directly via a Google Fonts import. 
+ * This is simpler than local hosting for WeasyPrint if the server has internet access.
+ * If not, the font file should be hosted locally and linked with an absolute path.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap');
+
+body {
+    font-family: 'Vazirmatn', sans-serif;
+    font-size: 10pt;
+    background-color: #ffffff;
+    color: #000000;
+    line-height: 1.5;
+    -webkit-print-color-adjust: exact; /* Ensures background colors print */
+    print-color-adjust: exact;
+}
+
+/* Page Setup for A4 paper */
+@page {
+    size: A4;
+    margin: 1.5cm;
+}
+
+/* Report Header Section */
+.report-header {
+    text-align: center;
+    border-bottom: 2px solid #333333;
+    padding-bottom: 15px;
+    margin-bottom: 25px;
+}
+
+.report-header h1 {
+    font-size: 22pt;
+    font-weight: 700;
+    margin: 0;
+    padding: 0;
+}
+
+.report-header p {
+    font-size: 11pt;
+    color: #555555;
+    margin: 5px 0 0 0;
+}
+
+/* Main Section Titles */
+h2 {
+    font-size: 18pt;
+    font-weight: 700;
+    background-color: #eeeeee;
+    padding: 10px 15px;
+    border: 1px solid #dddddd;
+    border-radius: 4px;
+    margin-top: 30px;
+    page-break-before: auto;
+    page-break-after: avoid;
+}
+
+h3 {
+    font-size: 15pt;
+    font-weight: 700;
+    border-bottom: 1px solid #cccccc;
+    padding-bottom: 8px;
+    margin-top: 25px;
+    margin-bottom: 15px;
+    page-break-after: avoid;
+}
+
+h4 {
+    font-size: 12pt;
+    font-weight: 700;
+    margin-top: 20px;
+    margin-bottom: 10px;
+}
+
+/* Table Styles */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+    page-break-inside: auto; /* Allow tables to break across pages if necessary */
+}
+
+th, td {
+    border: 1px solid #cccccc;
+    padding: 8px 10px;
+    text-align: right;
+    vertical-align: top;
+}
+
+thead {
+    background-color: #333333;
+    color: #ffffff;
+    font-weight: 700;
+    display: table-header-group; /* Ensures the table header repeats on each page */
+}
+
+tbody tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+tr {
+    page-break-inside: avoid; /* Try to keep rows on the same page */
+    page-break-after: auto;
+}
+
+/* Summary List Styles */
+.summary-list {
+    list-style-type: none;
+    padding: 0;
+    margin: 15px 0;
+    border: 1px solid #dddddd;
+    border-radius: 4px;
+    overflow: hidden; /* For rounded corners */
+}
+
+.summary-list li {
+    padding: 10px 15px;
+    border-bottom: 1px solid #dddddd;
+    display: block;
+    overflow: hidden; /* Clear floats */
+}
+
+.summary-list li:last-child {
+    border-bottom: none;
+}
+
+.summary-list strong {
+    float: left; /* Aligns the value to the left for a clean look */
+    font-weight: 700;
+}
+
+/* ... (add these styles) ... */
+.bonus-summary {
+    border: 1px solid #cce5ff;
+    background-color: #f8f9fa;
+    padding: 10px 15px;
+    margin: 15px 0;
+    border-radius: 4px;
+}
+.bonus-summary h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 13pt;
+}
+.bonus-summary ul {
+    padding-right: 20px;
+    margin: 0;
+}
+hr {
+    border: none;
+    border-top: 1px solid #eee;
+    margin: 5px 0;
+}
+.role-summary {
+    border-style: dashed;
+}
