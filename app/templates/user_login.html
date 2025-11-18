@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}ورود به گزارش{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-6 col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-header text-center">
+                <h4 class="mb-0">ورود به گزارش</h4>
+                <p class="mb-0 text-muted small">برای مشاهده گزارش {{ run.filename }}</p>
+            </div>
+            <div class="card-body p-4 text-center">
+                <p>سلام، <strong>{{ user.name }}</strong>!</p>
+                <p>لطفاً برای مشاهده گزارش خود، رمز عبور را وارد کنید.</p>
+                
+                <form method="POST" action="{{ url_for('main.user_login', public_id=run.public_id, username=user.username) }}" novalidate>
+                    {{ form.hidden_tag() }}
+                    <div class="mb-3">
+                        {{ form.password.label(class="form-label") }}
+                        {{ form.password(class="form-control text-center" + (" is-invalid" if form.errors.password else ""), placeholder="••••••••") }}
+                        {% if form.errors.password %}
+                            <div class="invalid-feedback">
+                                {% for error in form.errors.password %}
+                                    <span>{{ error }}</span>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="d-grid">
+                        {{ form.submit(class="btn btn-primary btn-block") }}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

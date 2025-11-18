@@ -12,55 +12,46 @@
 
 <div class="card shadow-sm">
     <div class="card-body">
-        <div class="table-responsive">
-            <table id="historyTable" class="table table-hover">
-                <thead class="table-dark">
-                    <tr>
-                        <th scope="col">ID</th>
-                        <th scope="col">نام فایل</th>
-                        <th scope="col">دوره گزارش</th>
-                        <th scope="col">تاریخ بارگذاری</th>
-                        <th scope="col">عملیات</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for run in runs %}
-                    <tr>
-                        <td>{{ run.id }}</td>
-                        <td>{{ run.filename }}</td>
-                        <td>{{ run.report_period }}</td>
-                        <td>{{ run.upload_timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
-                        <td>
-                            <a href="{{ url_for('main.view_report', run_id=run.id) }}" class="btn btn-info btn-sm">مشاهده گزارش</a>
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="5" class="text-center text-muted">هیچ محاسبه‌ای تاکنون ذخیره نشده است.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="accordion" id="historyAccordion">
+            {% for run in runs %}
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="heading-{{ run.id }}">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ run.id }}" aria-expanded="false" aria-controls="collapse-{{ run.id }}">
+                        <div class="d-flex w-100 justify-content-between pe-3">
+                            <span><strong>فایل:</strong> {{ run.filename }}</span>
+                            <span class="text-muted"><strong>دوره:</strong> {{ run.report_period }}</span>
+                            <small class="text-muted">{{ run.upload_timestamp.strftime('%Y-%m-%d %H:%M') }}</small>
+                        </div>
+                    </button>
+                </h2>
+                <div id="collapse-{{ run.id }}" class="accordion-collapse collapse" aria-labelledby="heading-{{ run.id }}" data-bs-parent="#historyAccordion">
+                    <div class="accordion-body">
+                        <h5>لینک‌های گزارش</h5>
+                        <p class="text-muted small">
+                            لینک‌های زیر برای اشتراک‌گذاری با کاربران است. هر کاربر تنها می‌تواند اطلاعات مربوط به خود را پس از ورود مشاهده کند.
+                        </p>
+                        <ul class="list-group">
+                            {% for user in run.users %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>👤 {{ user.name }} ({{ user.username }})</span>
+                                <a href="{{ url_for('main.user_login', public_id=run.public_id, username=user.username) }}" class="btn btn-outline-primary btn-sm" target="_blank">مشاهده گزارش کاربر</a>
+                            </li>
+                            {% else %}
+                            <li class="list-group-item text-muted">هیچ کاربری که در این گزارش حضور داشته باشد، در سیستم تعریف نشده است.</li>
+                            {% endfor %}
+                        </ul>
+                        <hr>
+                        <p class="mt-3">
+                            <!-- UPDATED LINK -->
+                            <a href="{{ url_for('main.admin_master_report', public_id=run.public_id) }}" class="btn btn-info" target="_blank">مشاهده گزارش کامل (مخصوص ادمین)</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <p class="text-center text-muted p-3">هیچ محاسبه‌ای تاکنون ذخیره نشده است.</p>
+            {% endfor %}
         </div>
     </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-    $(document).ready(function () {
-        $('#historyTable').DataTable({
-            "language": {
-                "processing": "در حال پردازش...", "search": "جستجو:",
-                "lengthMenu": "نمایش _MENU_ مورد", "info": "نمایش _START_ تا _END_ از _TOTAL_ مورد",
-                "infoEmpty": "نمایش 0 تا 0 از 0 مورد", "infoFiltered": "(فیلتر شده از _MAX_ مورد)",
-                "loadingRecords": "در حال بارگیری...", "zeroRecords": "هیچ موردی یافت نشد.",
-                "emptyTable": "هیچ داده‌ای در جدول وجود ندارد.",
-                "paginate": { "first": "اولین", "previous": "قبلی", "next": "بعدی", "last": "آخرین" },
-                "aria": { "sortAscending": ": فعال‌سازی برای مرتب‌سازی صعودی ستون", "sortDescending": ": فعال‌سازی برای مرتب‌سازی نزولی ستون" }
-            },
-            "order": [[ 3, "desc" ]] // Sort by the 4th column (date) descending by default
-        });
-    });
-</script>
 {% endblock %}

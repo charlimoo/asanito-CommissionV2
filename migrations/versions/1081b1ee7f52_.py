@@ -1,8 +1,8 @@
 """empty message
 
-Revision ID: c8a3cb9dee01
+Revision ID: 1081b1ee7f52
 Revises: 
-Create Date: 2025-11-18 01:44:21.947559
+Create Date: 2025-11-18 22:57:30.254092
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'c8a3cb9dee01'
+revision = '1081b1ee7f52'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -31,12 +31,14 @@ def upgrade():
 
     op.create_table('calculation_run',
     sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('public_id', sa.String(length=36), nullable=False),
     sa.Column('filename', sa.String(length=128), nullable=False),
     sa.Column('report_period', sa.String(length=64), nullable=True),
     sa.Column('upload_timestamp', sa.DateTime(), nullable=True),
     sa.Column('detailed_results_json', sa.Text(), nullable=True),
     sa.Column('targets_json', sa.Text(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('public_id')
     )
     with op.batch_alter_table('calculation_run', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_calculation_run_report_period'), ['report_period'], unique=False)
@@ -64,6 +66,17 @@ def upgrade():
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('year', 'month', name='_year_month_uc')
     )
+    op.create_table('user',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('username', sa.String(length=64), nullable=False),
+    sa.Column('password_hash', sa.String(length=256), nullable=True),
+    sa.Column('name', sa.String(length=128), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('user', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_user_name'), ['name'], unique=True)
+        batch_op.create_index(batch_op.f('ix_user_username'), ['username'], unique=True)
+
     op.create_table('person_result',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('person_name', sa.String(length=128), nullable=False),
@@ -73,6 +86,8 @@ def upgrade():
     sa.Column('total_payable_commission', sa.Float(), nullable=True),
     sa.Column('total_paid_commission', sa.Float(), nullable=True),
     sa.Column('remaining_balance', sa.Float(), nullable=True),
+    sa.Column('total_full_commission', sa.Float(), nullable=True),
+    sa.Column('total_pending_commission', sa.Float(), nullable=True),
     sa.Column('calculation_run_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['calculation_run_id'], ['calculation_run.id'], ),
     sa.PrimaryKeyConstraint('id')
@@ -89,6 +104,11 @@ def downgrade():
         batch_op.drop_index(batch_op.f('ix_person_result_person_name'))
 
     op.drop_table('person_result')
+    with op.batch_alter_table('user', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_user_username'))
+        batch_op.drop_index(batch_op.f('ix_user_name'))
+
+    op.drop_table('user')
     op.drop_table('monthly_target')
     with op.batch_alter_table('commission_rule_set', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_commission_rule_set_model_name'))

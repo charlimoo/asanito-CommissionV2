@@ -133,13 +133,21 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function updateFilters() {
-        const selectedPeople = Array.from(personFilters)
-                                    .filter(cb => cb.checked)
-                                    .map(cb => cb.value);
+        let peopleToShow;
+
+        // --- FIX FOR USER VIEW ---
+        // If no checkboxes exist (User View), we assume we should show everyone present in the data.
+        if (personFilters.length === 0) {
+            peopleToShow = frontendData.personList;
+        } else {
+            // Admin View: Calculate based on checked boxes
+            peopleToShow = Array.from(personFilters)
+                                .filter(cb => cb.checked)
+                                .map(cb => cb.value);
+        }
+        // --- END OF FIX ---
 
         const allPeople = frontendData.personList;
-        // If nothing is selected, behave as if nothing should be shown.
-        const peopleToShow = selectedPeople;
         
         // Update "Select All" checkbox state
         if (selectAllCheckbox) {

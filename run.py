@@ -5,7 +5,7 @@
 # ==============================================================================
 
 from app import create_app, db
-from app.models import AppSetting, CommissionRuleSet, MonthlyTarget
+from app.models import AppSetting, CommissionRuleSet, MonthlyTarget, User
 
 # Create the Flask application instance using the factory function
 app = create_app()
@@ -17,7 +17,8 @@ def make_shell_context():
         'db': db,
         'AppSetting': AppSetting,
         'CommissionRuleSet': CommissionRuleSet,
-        'MonthlyTarget': MonthlyTarget
+        'MonthlyTarget': MonthlyTarget,
+        'User': User
     }
 
 if __name__ == '__main__':

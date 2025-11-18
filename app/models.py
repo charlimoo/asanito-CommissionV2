@@ -7,6 +7,9 @@
 from datetime import datetime
 from app import db
 import json
+import uuid
+from werkzeug.security import generate_password_hash, check_password_hash
+
 class CalculationRun(db.Model):
     """
     Stores metadata for each uploaded file and calculation run.
@@ -14,6 +17,7 @@ class CalculationRun(db.Model):
     """
     __tablename__ = 'calculation_run'
     id = db.Column(db.Integer, primary_key=True)
+    public_id = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     filename = db.Column(db.String(128), nullable=False)
     report_period = db.Column(db.String(64), index=True)
     upload_timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
@@ -42,6 +46,11 @@ class PersonResult(db.Model):
     total_payable_commission = db.Column(db.Float, default=0)
     total_paid_commission = db.Column(db.Float, default=0)
     remaining_balance = db.Column(db.Float, default=0)
+    
+    # --- ADDED FIELDS ---
+    total_full_commission = db.Column(db.Float, default=0) # Potential commission at 100% collection
+    total_pending_commission = db.Column(db.Float, default=0) # Commission waiting on collection
+    # --- END OF ADDED FIELDS ---
     
     # Foreign Key to link back to the CalculationRun
     calculation_run_id = db.Column(db.Integer, db.ForeignKey('calculation_run.id'), nullable=False)
@@ -110,3 +119,25 @@ class AppSetting(db.Model):
         if self.value_type == 'json':
             return json.loads(self.value)
         return self.value
+    
+class User(db.Model):
+    """
+    Stores user credentials for accessing personalized reports.
+    """
+    __tablename__ = 'user'
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(64), index=True, unique=True, nullable=False)
+    password_hash = db.Column(db.String(256))
+    # This 'name' field MUST EXACTLY MATCH the name in the Excel file's sales data sheets.
+    name = db.Column(db.String(128), index=True, unique=True, nullable=False)
+
+    def set_password(self, password):
+        """Hashes and sets the user's password."""
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        """Checks if the provided password matches the stored hash."""
+        return check_password_hash(self.password_hash, password)
+
+    def __repr__(self):
+        return f'<User {self.username}>'

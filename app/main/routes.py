@@ -13,14 +13,16 @@ import pandas as pd
 from flask import (render_template, request, flash, redirect, url_for, 
                    current_app, session, Response)
 from werkzeug.utils import secure_filename
+from sqlalchemy.exc import IntegrityError
 import pdfkit
 
 from app import db
 from app.main import bp
-from app.models import CalculationRun, PersonResult, CommissionRuleSet, MonthlyTarget, AppSetting
+from app.models import CalculationRun, PersonResult, CommissionRuleSet, MonthlyTarget, AppSetting, User
 from app.calculator.validator import validate_excel_file
 from app.calculator.engine import calculate_commissions, summarize_results, CalculationConfig
-from app.main.forms import AdminLoginForm, CommissionRuleForm, MonthlyTargetForm, AppSettingForm
+from app.main.forms import (AdminLoginForm, CommissionRuleForm, MonthlyTargetForm, AppSettingForm, 
+                            UserForm, EditUserForm, UserLoginForm)
 from app.main.utils import prepare_frontend_data, _perform_frontend_aggregation
 
 # --- Helper Functions ---
@@ -82,7 +84,7 @@ def index():
                     report_period=period_string,
                     upload_timestamp=datetime.utcnow(),
                     detailed_results_json=json.dumps(results, ensure_ascii=False),
-                    targets_json=targets_json_str # <-- SAVE THE TARGETS
+                    targets_json=targets_json_str
                 )
                 db.session.add(new_run)
                 db.session.flush()
@@ -94,13 +96,15 @@ def index():
                         total_additional_bonus=data['total_additional_bonus'],
                         total_payable_commission=data['total_payable_commission'],
                         total_paid_commission=data['total_paid_commission'],
+                        total_full_commission=data['total_full_commission'],
+                        total_pending_commission=data['total_pending_commission'],
                         remaining_balance=data['remaining_balance'], calculation_run_id=new_run.id
                     )
                     db.session.add(person_result)
                 
                 db.session.commit()
                 flash('محاسبات با موفقیت انجام و ذخیره شد.', 'success')
-                return redirect(url_for('main.view_report', run_id=new_run.id))
+                return redirect(url_for('main.admin_master_report', public_id=new_run.public_id))
 
             except Exception as e:
                 db.session.rollback()
@@ -115,113 +119,129 @@ def index():
     return render_template('index.html')
 
 @bp.route('/history')
+@admin_required
 def history():
-    """Displays a list of all past calculation runs."""
+    """Displays a list of all past calculation runs for the admin."""
     runs = CalculationRun.query.order_by(CalculationRun.upload_timestamp.desc()).all()
+    for run in runs:
+        run.person_names = [p.person_name for p in run.person_results]
+        run.users = User.query.filter(User.name.in_(run.person_names)).all()
     return render_template('history.html', runs=runs)
 
+# --- NEW REPORTING AND LOGIN FLOW ---
+
+@bp.route('/login/<public_id>/<username>', methods=['GET', 'POST'])
+def user_login(public_id, username):
+    """Login page for a specific user to view a specific report."""
+    run = CalculationRun.query.filter_by(public_id=public_id).first_or_404()
+    user = User.query.filter_by(username=username).first_or_404()
+    
+    person_exists = PersonResult.query.filter_by(calculation_run_id=run.id, person_name=user.name).first()
+    if not person_exists:
+        flash('شما به این گزارش دسترسی ندارید.', 'danger')
+        return redirect(url_for('main.index'))
+
+    form = UserLoginForm()
+    if form.validate_on_submit():
+        if user.check_password(form.password.data):
+            session['report_access_user'] = user.username
+            session['report_access_id'] = run.public_id
+            return redirect(url_for('main.view_user_report', public_id=run.public_id, username=user.username))
+        else:
+            flash('رمز عبور نامعتبر است.', 'danger')
+            
+    return render_template('user_login.html', form=form, user=user, run=run)
+
+@bp.route('/report/<public_id>/<username>')
+def view_user_report(public_id, username):
+    """Displays a filtered, secure report for a single user."""
+    # --- DEBUG LOG ---
+    current_app.logger.info("="*50)
+    current_app.logger.info(f"ENTERING 'view_user_report' for user: '{username}', report: '{public_id}'")
+    
+    if session.get('report_access_user') != username or session.get('report_access_id') != public_id:
+        # --- DEBUG LOG ---
+        current_app.logger.warning(f"SESSION CHECK FAILED! Session user: '{session.get('report_access_user')}', Session report: '{session.get('report_access_id')}'")
+        flash('برای مشاهده این گزارش ابتدا باید وارد شوید.', 'warning')
+        return redirect(url_for('main.user_login', public_id=public_id, username=username))
+
+    # --- DEBUG LOG ---
+    current_app.logger.info("Session check PASSED.")
+    
+    run = CalculationRun.query.filter_by(public_id=public_id).first_or_404()
+    user = User.query.filter_by(username=username).first_or_404()
+    
+    # --- DEBUG LOG ---
+    current_app.logger.info(f"Successfully fetched User object. User's full name from DB is: '{user.name}'")
+    
+    if not run.detailed_results_json:
+        flash('اطلاعات دقیق برای این گزارش یافت نشد.', 'danger')
+        return redirect(url_for('main.index'))
+
+    full_results = json.loads(run.detailed_results_json)
+    all_person_results = PersonResult.query.filter_by(calculation_run_id=run.id).all()
+    
+    # --- DEBUG LOG ---
+    all_names_in_report = [p.person_name for p in all_person_results]
+    current_app.logger.info(f"All person names found in this report's PersonResult table: {all_names_in_report}")
+    
+    # --- THIS IS THE MOST IMPORTANT CHECK ---
+    user_name_to_filter = user.name
+    user_has_data = user_name_to_filter in all_names_in_report
+    # --- DEBUG LOG ---
+    current_app.logger.info(f"The name to filter by is: '{user_name_to_filter}'")
+    current_app.logger.info(f"Is the user's name in the report's list of people? {'YES' if user_has_data else 'NO'}")
+
+    if not user_has_data:
+        flash(f'اطلاعاتی برای کاربر "{user.name}" در این گزارش یافت نشد.', 'warning')
+        return redirect(url_for('main.index'))
+        
+    full_summary_data = {}
+    for res in all_person_results:
+        full_summary_data[res.person_name] = {
+            'person_name': res.person_name, 'commission_model': res.commission_model,
+            'total_original_commission': res.total_original_commission,
+            'total_additional_bonus': res.total_additional_bonus,
+            'total_payable_commission': res.total_payable_commission,
+            'total_paid_commission': res.total_paid_commission,
+            'total_full_commission': res.total_full_commission,
+            'total_pending_commission': res.total_pending_commission,
+            'remaining_balance': res.remaining_balance
+        }
+    
+    targets_df = pd.read_json(run.targets_json, orient='records') if run.targets_json else pd.DataFrame()
+    frontend_data = prepare_frontend_data(
+        full_results, 
+        full_summary_data, 
+        targets_df, 
+        filter_person_name=user.name
+    )
+    
+    # --- DEBUG LOG ---
+    current_app.logger.info(f"Data prepared for template. Number of people in final data: {len(frontend_data['personList'])}")
+    current_app.logger.info("="*50)
+    
+    return render_template(
+        'report.html', 
+        run=run,
+        frontend_data=frontend_data,
+        overall_summary=frontend_data['overallSummary'],
+        detailed_report=frontend_data['detailedReport'],
+        person_monthly_report=frontend_data['personMonthlyReport'],
+        person_list=frontend_data['personList'],
+        is_user_view=True
+    )
+
+# --- DEPRECATED/OLD ROUTES ---
 @bp.route('/report/<int:run_id>')
 def view_report(run_id):
-    """Displays the full, interactive report for a specific calculation run."""
-    run = CalculationRun.query.get_or_404(run_id)
-    
-    if run.detailed_results_json:
-        results = json.loads(run.detailed_results_json)
-        person_results_query = PersonResult.query.filter_by(calculation_run_id=run.id).all()
-        summary_data = {}
-        for res in person_results_query:
-            summary_data[res.person_name] = {
-                'person_name': res.person_name,
-                'commission_model': res.commission_model,
-                'total_original_commission': res.total_original_commission,
-                'total_additional_bonus': res.total_additional_bonus,
-                'total_payable_commission': res.total_payable_commission,
-                'total_paid_commission': res.total_paid_commission,
-                'remaining_balance': res.remaining_balance
-            }
-        
-        targets_df = pd.read_json(run.targets_json, orient='records') if run.targets_json else pd.DataFrame()
+    flash('این لینک گزارش منقضی شده است. لطفاً از لینک‌های جدید در صفحه تاریخچه استفاده کنید.', 'info')
+    if session.get('admin_logged_in'):
+        return redirect(url_for('main.history'))
+    return redirect(url_for('main.index'))
 
-        frontend_data = prepare_frontend_data(results, summary_data, targets_df)
-        
-        return render_template(
-            'report.html', 
-            run=run,
-            frontend_data=frontend_data,
-            overall_summary=frontend_data['overallSummary'],
-            detailed_report=frontend_data['detailedReport'],
-            person_monthly_report=frontend_data['personMonthlyReport'],
-            person_list=frontend_data['personList']
-        )
-    else:
-        # Fallback to simple summary view
-        person_results = PersonResult.query.filter_by(calculation_run_id=run.id).all()
-        return render_template('summary_report.html', run=run, person_results=person_results)
-
-@bp.route('/report/<int:run_id>/export/pdf')
-def export_pdf(run_id):
-    """Generates and serves a PDF report for a given calculation run using pdfkit."""
-    run = CalculationRun.query.get_or_404(run_id)
-    if not run.detailed_results_json:
-        flash('اطلاعات دقیق برای ساخت PDF یافت نشد.', 'danger')
-        return redirect(url_for('main.view_report', run_id=run_id))
-    
-    try:
-        results = json.loads(run.detailed_results_json)
-        aggregated_results = _perform_frontend_aggregation(results)
-        # --- THIS IS THE NEW FILTERING LOGIC ---
-        filtered_people_str = request.args.get('filter')
-        if filtered_people_str:
-            filtered_people = filtered_people_str.split(',')
-            filtered_results = {}
-            for month_key, month_data in aggregated_results.items():
-                # Copy top-level month data
-                filtered_month = month_data.copy()
-                filtered_month['persons'] = {}
-                
-                # Only include people who are in the filter list
-                for person_name, person_data in month_data.get('persons', {}).items():
-                    if person_name in filtered_people:
-                        filtered_month['persons'][person_name] = person_data
-                
-                # Only add the month to the final results if it contains filtered people
-                if filtered_month['persons']:
-                    filtered_results[month_key] = filtered_month
-            results_to_render = filtered_results
-            
-            # Use the filtered results for rendering
-            results_to_render = filtered_results
-        else:
-            # If no filter is provided, use the original full results
-            results_to_render = aggregated_results
-        # --- END OF FILTERING LOGIC ---
-
-        html_string = render_template(
-            'report_pdf.html', 
-            detailed_report=results_to_render, 
-            filename=run.filename
-        )
-        
-        path_wkhtmltopdf = current_app.config.get('WKHTMLTOPDF_PATH')
-        config = pdfkit.configuration(wkhtmltopdf=path_wkhtmltopdf)
-        options = {'page-size': 'A4', 'margin-top': '0.75in', 'margin-right': '0.75in', 'margin-bottom': '0.75in', 'margin-left': '0.75in', 'encoding': "UTF-8", 'no-outline': None}
-
-        pdf = pdfkit.from_string(html_string, False, configuration=config, options=options)
-        pdf_filename = f"commission_report_{run.id}_{run.report_period.replace(' ', '')}.pdf"
-
-        return Response(pdf, mimetype="application/pdf", headers={"Content-Disposition": f"attachment;filename={pdf_filename}"})
-
-    except FileNotFoundError:
-        current_app.logger.error(f"wkhtmltopdf not found at path: {current_app.config.get('WKHTMLTOPDF_PATH')}")
-        flash('خطا: فایل اجرایی ساخت PDF یافت نشد. لطفاً مسیر wkhtmltopdf را در کانفیگ بررسی کنید.', 'danger')
-        return redirect(url_for('main.view_report', run_id=run_id))
-    except Exception as e:
-        current_app.logger.error(f"PDF generation failed for run {run_id}: {e}", exc_info=True)
-        flash('خطایی در هنگام ساخت فایل PDF رخ داد.', 'danger')
-        return redirect(url_for('main.view_report', run_id=run_id))
-
+# ... [The rest of the routes.py file is unchanged from before] ...
 # --- Admin Panel Routes ---
-
 @bp.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
     """Handles admin login."""
@@ -239,6 +259,8 @@ def admin_login():
 def admin_logout():
     """Handles admin logout."""
     session.pop('admin_logged_in', None)
+    session.pop('report_access_user', None) # Also clear user session
+    session.pop('report_access_id', None)
     flash('شما با موفقیت خارج شدید.', 'info')
     return redirect(url_for('main.index'))
 
@@ -249,8 +271,46 @@ def admin_dashboard():
     rules = CommissionRuleSet.query.order_by(CommissionRuleSet.model_name, CommissionRuleSet.min_sales).all()
     targets = MonthlyTarget.query.order_by(MonthlyTarget.year.desc(), MonthlyTarget.month.desc()).all()
     return render_template('admin.html', rules=rules, targets=targets)
+    
+@bp.route('/admin/report/<public_id>')
+@admin_required
+def admin_master_report(public_id):
+    """Displays the full, unfiltered report for an administrator."""
+    run = CalculationRun.query.filter_by(public_id=public_id).first_or_404()
+    
+    if not run.detailed_results_json:
+        flash('اطلاعات دقیق برای این گزارش یافت نشد.', 'danger')
+        return redirect(url_for('main.history'))
 
-# --- CRUD for Commission Rules ---
+    results = json.loads(run.detailed_results_json)
+    person_results_query = PersonResult.query.filter_by(calculation_run_id=run.id).all()
+    summary_data = {}
+    for res in person_results_query:
+        summary_data[res.person_name] = {
+            'person_name': res.person_name, 'commission_model': res.commission_model,
+            'total_original_commission': res.total_original_commission,
+            'total_additional_bonus': res.total_additional_bonus,
+            'total_payable_commission': res.total_payable_commission,
+            'total_paid_commission': res.total_paid_commission,
+            'total_full_commission': res.total_full_commission,
+            'total_pending_commission': res.total_pending_commission,
+            'remaining_balance': res.remaining_balance
+        }
+    
+    targets_df = pd.read_json(run.targets_json, orient='records') if run.targets_json else pd.DataFrame()
+    frontend_data = prepare_frontend_data(results, summary_data, targets_df)
+    
+    return render_template(
+        'report.html', 
+        run=run,
+        frontend_data=frontend_data,
+        overall_summary=frontend_data['overallSummary'],
+        detailed_report=frontend_data['detailedReport'],
+        person_monthly_report=frontend_data['personMonthlyReport'],
+        person_list=frontend_data['personList'],
+        is_user_view=False
+    )
+
 @bp.route('/admin/rule/add', methods=['GET', 'POST'])
 @admin_required
 def add_rule():
@@ -293,7 +353,6 @@ def delete_rule(rule_id):
     flash('قانون پورسانت حذف شد.', 'success')
     return redirect(url_for('main.admin_dashboard'))
 
-# --- CRUD for Monthly Targets ---
 @bp.route('/admin/target/add', methods=['GET', 'POST'])
 @admin_required
 def add_target():
@@ -315,7 +374,6 @@ def delete_target(target_id):
     flash('تارگت ماهانه حذف شد.', 'success')
     return redirect(url_for('main.admin_dashboard'))
 
-# --- CRUD for App Settings ---
 @bp.route('/admin/settings', methods=['GET'])
 @admin_required
 def admin_settings():
@@ -329,25 +387,72 @@ def edit_setting(setting_id):
     form = AppSettingForm(obj=setting)
     if form.validate_on_submit():
         new_value = form.value.data
-        
         if setting.value_type == 'json':
             try:
-                # First, validate that the input is valid JSON
                 parsed_json = json.loads(new_value)
-                # Then, re-serialize it with ensure_ascii=False to store it correctly
                 new_value = json.dumps(parsed_json, ensure_ascii=False)
             except json.JSONDecodeError:
                 flash('مقدار وارد شده برای این تنظیم یک JSON معتبر نیست.', 'danger')
                 return render_template('admin_form.html', form=form, title=f'ویرایش تنظیم: {setting.key}', description=setting.description)
-        
         setting.value = new_value
         db.session.commit()
-        
-        # Invalidate the cached config so it reloads on next request
         from app.calculator.engine import CalculationConfig
         CalculationConfig._instance = None
-        
         flash(f'تنظیم "{setting.key}" با موفقیت ویرایش شد و حافظه نهان (cache) کانفیگ پاک شد.', 'success')
         return redirect(url_for('main.admin_settings'))
-        
     return render_template('admin_form.html', form=form, title=f'ویرایش تنظیم: {setting.key}', description=setting.description)
+
+@bp.route('/admin/users')
+@admin_required
+def manage_users():
+    """Lists all users for the admin."""
+    users = User.query.order_by(User.name).all()
+    return render_template('admin_users.html', users=users)
+
+@bp.route('/admin/user/add', methods=['GET', 'POST'])
+@admin_required
+def add_user():
+    """Handles adding a new user."""
+    form = UserForm()
+    if form.validate_on_submit():
+        try:
+            user = User(username=form.username.data, name=form.name.data)
+            user.set_password(form.password.data)
+            db.session.add(user)
+            db.session.commit()
+            flash(f'کاربر "{user.username}" با موفقیت اضافه شد.', 'success')
+            return redirect(url_for('main.manage_users'))
+        except IntegrityError:
+            db.session.rollback()
+            flash('نام کاربری یا نام کامل از قبل وجود دارد. لطفاً مقدار دیگری را انتخاب کنید.', 'danger')
+    return render_template('admin_user_form.html', form=form, title='افزودن کاربر جدید')
+
+@bp.route('/admin/user/edit/<int:user_id>', methods=['GET', 'POST'])
+@admin_required
+def edit_user(user_id):
+    """Handles editing an existing user."""
+    user = User.query.get_or_404(user_id)
+    form = EditUserForm(obj=user)
+    if form.validate_on_submit():
+        try:
+            user.username = form.username.data
+            user.name = form.name.data
+            if form.password.data:
+                user.set_password(form.password.data)
+            db.session.commit()
+            flash(f'اطلاعات کاربر "{user.username}" با موفقیت ویرایش شد.', 'success')
+            return redirect(url_for('main.manage_users'))
+        except IntegrityError:
+            db.session.rollback()
+            flash('نام کاربری یا نام کامل از قبل وجود دارد و متعلق به کاربر دیگری است.', 'danger')
+    return render_template('admin_user_form.html', form=form, title=f'ویرایش کاربر: {user.username}')
+
+@bp.route('/admin/user/delete/<int:user_id>', methods=['POST'])
+@admin_required
+def delete_user(user_id):
+    """Handles deleting a user."""
+    user = User.query.get_or_404(user_id)
+    db.session.delete(user)
+    db.session.commit()
+    flash(f'کاربر "{user.username}" حذف شد.', 'success')
+    return redirect(url_for('main.manage_users'))

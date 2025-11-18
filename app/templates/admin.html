@@ -1,3 +1,4 @@
+
 {% extends "base.html" %}
 {% block title %}پنل مدیریت{% endblock %}
 
@@ -5,6 +6,8 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="display-6 fw-bold">پنل مدیریت قوانین</h1>
     <div>
+        <!-- NEW BUTTON FOR USER MANAGEMENT -->
+        <a href="{{ url_for('main.manage_users') }}" class="btn btn-outline-primary">مدیریت کاربران</a>
         <a href="{{ url_for('main.admin_settings') }}" class="btn btn-outline-secondary">تنظیمات</a>
         <a href="{{ url_for('main.admin_logout') }}" class="btn btn-outline-danger">خروج</a>
     </div>

@@ -323,10 +323,27 @@ def summarize_results(results, commissions_paid_df, config):
     
     for month_data in results.values():
         for person_name, person_data in month_data.get('persons', {}).items():
-            person_summary = summary.setdefault(person_name, {'person_name': person_name, 'commission_model': person_data.get('model'), 'total_original_commission': 0, 'total_additional_bonus': 0})
+            # --- MODIFICATION IS HERE ---
+            person_summary = summary.setdefault(person_name, {
+                'person_name': person_name,
+                'commission_model': person_data.get('model'),
+                'total_original_commission': 0,
+                'total_additional_bonus': 0,
+                'total_full_commission': 0,
+                'total_pending_commission': 0
+            })
+            # --- END OF MODIFICATION ---
+            
             original_commission = person_data['total_commission'] - person_data.get('additional_bonus', 0)
             person_summary['total_original_commission'] += original_commission
             person_summary['total_additional_bonus'] += person_data.get('additional_bonus', 0)
+
+            # --- ADDED AGGREGATION LOGIC ---
+            full_commission_monthly = sum(txn.get('full_commission', 0) for txn in person_data['transactions'])
+            pending_commission_monthly = sum(txn.get('commission_remaining', 0) for txn in person_data['transactions'])
+            person_summary['total_full_commission'] += full_commission_monthly
+            person_summary['total_pending_commission'] += pending_commission_monthly
+            # --- END OF ADDED LOGIC ---
 
     for person_name, data in summary.items():
         data['total_payable_commission'] = data['total_original_commission'] + data['total_additional_bonus']
