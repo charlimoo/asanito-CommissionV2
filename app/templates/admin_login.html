@@ -11,7 +11,7 @@
             <div class="card-body p-4">
                 <form method="POST" action="{{ url_for('main.admin_login') }}" novalidate>
                     {{ form.hidden_tag() }}
-                    <div class="mb-3">
+                    <div class="mb-3"> 
                         {{ form.password.label(class="form-label") }}
                         {{ form.password(class="form-control" + (" is-invalid" if form.errors.password else ""), placeholder="••••••••") }}
                         {% if form.errors.password %}
