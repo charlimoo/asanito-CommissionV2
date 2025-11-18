@@ -20,7 +20,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ==============================================================================
-# Stage 2: The Final Image (Corrected Order)
+# Stage 2: Final Image (modified for Option A)
 # ==============================================================================
 FROM python:3.9-slim
 
@@ -39,22 +39,14 @@ RUN apt-get update && \
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# --- MODIFICATION IS HERE: PERFORM ALL ROOT OPERATIONS FIRST ---
-# 1. Create the user and group first.
-RUN addgroup --system app && adduser --system --group app
-
-# 2. Copy the application code. This is still owned by root.
+# Copy the app code
 COPY . .
 
-# 3. Make the entrypoint script executable WHILE STILL ROOT.
+# Make entrypoint executable
 RUN chmod +x entrypoint.sh
 
-# 4. Now, change the ownership of EVERYTHING to the 'app' user.
-RUN chown -R app:app /app
-
-# 5. Finally, switch to the non-root user for runtime.
-USER app
-# --- END OF MODIFICATION ---
+# IMPORTANT: Do NOT change user. App will run as root (allows writing to mounted volume)
+# USER app    <-- REMOVE THIS
 
 EXPOSE 5000
 
