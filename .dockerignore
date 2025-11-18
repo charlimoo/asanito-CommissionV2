@@ -1,0 +1,28 @@
+# Docker ignore file
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+*.venv/
+env/
+*.env/
+
+# IDE / Editor specific
+.idea/
+.vscode/
+
+# Application Data - THIS IS THE KEY FIX
+instance/
+*.db
+*.sqlite3
+
+# Docker
+Dockerfile
+.dockerignore
