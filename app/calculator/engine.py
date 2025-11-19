@@ -1,5 +1,6 @@
+# start of app/calculator/engine.py
 # ==============================================================================
-# app/calculator/engine.py (Final, Complete, and Corrected)
+# app/calculator/engine.py (Updated: Removed Agent/50% Logic)
 # ==============================================================================
 
 import pandas as pd
@@ -12,7 +13,6 @@ from app.models import CommissionRuleSet, AppSetting
 class CalculationConfig:
     """
     A singleton class to load and hold all business rules from the database.
-    This ensures the database is queried only once per application lifecycle.
     """
     _instance = None
 
@@ -36,9 +36,10 @@ class CalculationConfig:
         self.CURRENCY_CONVERSION_FACTOR = settings_dict.get('CURRENCY_CONVERSION_FACTOR', 0.1)
         self.RENEWAL_COMMISSION_RATE = settings_dict.get('RENEWAL_COMMISSION_RATE', 0.05)
         self.BRACKET_QUALIFICATION_MIN_COLLECTION_PERCENT = settings_dict.get('BRACKET_QUALIFICATION_MIN_COLLECTION_PERCENT', 0.3)
-        self.AGENT_SALE_MULTIPLIER = settings_dict.get('AGENT_SALE_MULTIPLIER', 0.5)
         self.DEFAULT_COMMISSION_MODEL = settings_dict.get('DEFAULT_COMMISSION_MODEL', 'پورسانت خالص')
-        self.AGENT_KEYWORDS = settings_dict.get('AGENT_KEYWORDS', ['نمایندگان', 'نماینده'])
+        
+        # REMOVED: AGENT_SALE_MULTIPLIER and AGENT_KEYWORDS
+        
         self.BONUS_PERCENTAGES = settings_dict.get('BONUS_PERCENTAGES', {'collective': 0.05, 'individual': 0.03, 'top_seller': 0.02})
         self.BRACKET_QUALIFICATION_MIN_VALUES = settings_dict.get('BRACKET_QUALIFICATION_MIN_VALUES', {'استاندارد': 12000000, 'حرفه‌ای': 40000000, 'VIP': 60000000, 'default': 12000000})
 
@@ -61,7 +62,7 @@ def _get_commission_rates_for_bracket(bracket_base, commission_model, all_rules)
 
 def calculate_commissions(dataframes):
     logging.info("="*80)
-    logging.info("STARTING COMMISSION CALCULATION PROCESS (FORENSIC MODE)")
+    logging.info("STARTING COMMISSION CALCULATION PROCESS (FORENSIC MODE - NO AGENT LOGIC)")
     logging.info("="*80)
     
     config = CalculationConfig()
@@ -107,8 +108,8 @@ def calculate_commissions(dataframes):
         logging.debug(f"\n{row_summary}")
         
         if 'مذاکره کننده ارشد' not in row.index:
-            logging.error(f"FATAL FLAW in Excel file: Column 'مذاکره کننده ارشد' not found! All bracket calculations will be 0.")
-            logging.error(f"Available columns are: {list(row.index)}")
+            logging.error(f"FATAL FLAW in Excel file: Column 'مذاکره کننده ارشد' not found!")
+            continue
 
         try:
             month = str(int(row.get('ماه'))).strip()
@@ -129,9 +130,7 @@ def calculate_commissions(dataframes):
         else:
             plan_version = 'default'
         
-        marketer_name = str(row.get('بازاریاب', '')).strip()
-        asanito_plan_percent = row.get('درصد پلن های آسانیتویی', 100)
-        is_agent_sale = any(keyword in marketer_name for keyword in config.AGENT_KEYWORDS) or (asanito_plan_percent == 50)
+        # REMOVED: Agent Detection Logic
 
         min_collection_value = config.BRACKET_QUALIFICATION_MIN_VALUES.get(plan_version, config.BRACKET_QUALIFICATION_MIN_VALUES.get('default', 0))
         collection_ratio = (paid_amount / net_value) if net_value > 0 else 0
@@ -171,13 +170,13 @@ def calculate_commissions(dataframes):
             })
             
             if role == 'مذاکره کننده ارشد' and qualifies_for_bracket:
-                bracket_value = commission_base * (config.AGENT_SALE_MULTIPLIER if is_agent_sale else 1.0)
-                person_data['bracket_base'] += bracket_value
-                logging.debug(f"  > QUALIFIED: Adding {bracket_value:,.0f} to bracket_base for {person_name}. New base: {person_data['bracket_base']:,.0f}")
+                # UPDATED: Always add the full commission base, no multiplier
+                person_data['bracket_base'] += commission_base
+                logging.debug(f"  > QUALIFIED: Adding {commission_base:,.0f} to bracket_base for {person_name}.")
 
             person_data['transactions'].append({
                 'role': role, 'net_value': net_value, 'commission_base': commission_base, 
-                'paid_amount': paid_amount, 'is_renewal': is_renewal, 'is_agent_sale': is_agent_sale, 
+                'paid_amount': paid_amount, 'is_renewal': is_renewal, 
                 'company': str(row.get('شرکت خریدار', '')).strip(), 
                 'invoice_link': str(row.get('لینک فاکتور', '')).strip()
             })
@@ -194,9 +193,9 @@ def calculate_commissions(dataframes):
             person_data['total_commission'] = 0
             for txn in person_data['transactions']:
                 original_rate = config.RENEWAL_COMMISSION_RATE if txn['is_renewal'] else rates.get(txn['role'], 0)
-                current_rate = original_rate
-                if txn['is_agent_sale']:
-                    current_rate *= config.AGENT_SALE_MULTIPLIER
+                
+                # UPDATED: No Agent Multiplier applied here
+                current_rate = original_rate 
                 
                 collection_ratio = (txn['paid_amount'] / txn['net_value']) if txn['net_value'] > 0 else 1.0
                 full_commission = txn['commission_base'] * current_rate
@@ -211,15 +210,13 @@ def calculate_commissions(dataframes):
 
                 details = [
                     f"مبلغ مبنای پورسانت: {txn['commission_base']:,.0f} تومان",
-                    f"نرخ پایه پورسانت (نقش {txn['role']}): {original_rate:.2%}",
+                    f"نرخ پورسانت (نقش {txn['role']}): {current_rate:.2%}",
+                    f"محاسبه پورسانت کامل: {txn['commission_base']:,.0f} * {current_rate:.2%} = {full_commission:,.0f} تومان",
+                    "-" * 20,
+                    f"نسبت وصول: {collection_ratio:.2%} ({txn['paid_amount']:,.0f} / {txn['net_value']:,.0f})",
+                    f"پورسانت قابل پرداخت: {full_commission:,.0f} * {collection_ratio:.2%} = {payable_commission:,.0f} تومان",
+                    f"پورسانت باقی مانده: {full_commission:,.0f} - {payable_commission:,.0f} = {commission_remaining:,.0f} تومان"
                 ]
-                if txn['is_agent_sale']:
-                    details.append(f"اعمال ضریب نماینده ({config.AGENT_SALE_MULTIPLIER:.0%}): {original_rate:.2%} * {config.AGENT_SALE_MULTIPLIER:.0%} = {current_rate:.2%}")
-                details.append(f"محاسبه پورسانت کامل: {txn['commission_base']:,.0f} * {current_rate:.2%} = {full_commission:,.0f} تومان")
-                details.append("-" * 20)
-                details.append(f"نسبت وصول: {collection_ratio:.2%} ({txn['paid_amount']:,.0f} / {txn['net_value']:,.0f})")
-                details.append(f"پورسانت قابل پرداخت: {full_commission:,.0f} * {collection_ratio:.2%} = {payable_commission:,.0f} تومان")
-                details.append(f"پورسانت باقی مانده: {full_commission:,.0f} - {payable_commission:,.0f} = {commission_remaining:,.0f} تومان")
                 txn['calculation_details'] = "\n".join(details)
     logging.info("--- Pass 2 Finished. ---")
 
@@ -245,7 +242,6 @@ def calculate_commissions(dataframes):
             current_collective = target_data.get('تارگت جمعی')
             if not pd.isna(current_collective):
                 last_valid_targets['collective'] = current_collective
-            
             current_individual = target_data.get('تارگت فرعی')
             if not pd.isna(current_individual):
                 last_valid_targets['individual'] = current_individual
@@ -268,7 +264,7 @@ def calculate_commissions(dataframes):
                 top_seller_sales = p_data['bracket_base']; top_seller_name = name
         logging.info(f"  Monthly Bracket Base Total: {total_monthly_bracket_base:,.0f}. Top Seller: {top_seller_name}")
 
-        month_data['bonus_summary'] = { # Storing for frontend
+        month_data['bonus_summary'] = {
             'collective_target': collective_target_toman, 'individual_target': individual_target_toman,
             'collective_amount': 0, 'individual_amount': 0, 'top_seller_amount': 0,
             'top_seller_name': top_seller_name, 'top_seller_sales': top_seller_sales,
@@ -289,20 +285,19 @@ def calculate_commissions(dataframes):
             
             if coll_check: 
                 coll_bonus = bracket_base * config.BONUS_PERCENTAGES['collective']
-                bonus_details_list.append(f"پاداش جمعی: ... = {coll_bonus:,.0f} تومان")
+                bonus_details_list.append(f"پاداش جمعی: {coll_bonus:,.0f} تومان")
                 bonus_amount += coll_bonus
             if ind_check: 
                 ind_bonus = bracket_base * config.BONUS_PERCENTAGES['individual']
-                bonus_details_list.append(f"پاداش فردی: ... = {ind_bonus:,.0f} تومان")
+                bonus_details_list.append(f"پاداش فردی: {ind_bonus:,.0f} تومان")
                 bonus_amount += ind_bonus
             if top_check: 
                 top_bonus = bracket_base * config.BONUS_PERCENTAGES['top_seller']
-                bonus_details_list.append(f"پاداش تاپ سلر: ... = {top_bonus:,.0f} تومان")
+                bonus_details_list.append(f"پاداش تاپ سلر: {top_bonus:,.0f} تومان")
                 bonus_amount += top_bonus
                 
             p_data['additional_bonus'] = bonus_amount
             p_data['total_commission'] += bonus_amount
-            logging.info(f"    => Total Bonus for {name}: {bonus_amount:,.0f}. New Total Commission: {p_data['total_commission']:,.0f}")
             
             if bonus_amount > 0:
                 bonus_details_header = "\n" + ("-"*10) + " جزئیات پاداش " + ("-"*10)
@@ -323,7 +318,6 @@ def summarize_results(results, commissions_paid_df, config):
     
     for month_data in results.values():
         for person_name, person_data in month_data.get('persons', {}).items():
-            # --- MODIFICATION IS HERE ---
             person_summary = summary.setdefault(person_name, {
                 'person_name': person_name,
                 'commission_model': person_data.get('model'),
@@ -332,18 +326,15 @@ def summarize_results(results, commissions_paid_df, config):
                 'total_full_commission': 0,
                 'total_pending_commission': 0
             })
-            # --- END OF MODIFICATION ---
             
             original_commission = person_data['total_commission'] - person_data.get('additional_bonus', 0)
             person_summary['total_original_commission'] += original_commission
             person_summary['total_additional_bonus'] += person_data.get('additional_bonus', 0)
 
-            # --- ADDED AGGREGATION LOGIC ---
             full_commission_monthly = sum(txn.get('full_commission', 0) for txn in person_data['transactions'])
             pending_commission_monthly = sum(txn.get('commission_remaining', 0) for txn in person_data['transactions'])
             person_summary['total_full_commission'] += full_commission_monthly
             person_summary['total_pending_commission'] += pending_commission_monthly
-            # --- END OF ADDED LOGIC ---
 
     for person_name, data in summary.items():
         data['total_payable_commission'] = data['total_original_commission'] + data['total_additional_bonus']
@@ -352,3 +343,4 @@ def summarize_results(results, commissions_paid_df, config):
         
     logging.info(f"--- Summarization complete. Generated summary for {len(summary)} people. ---")
     return summary
+# end of app/calculator/engine.py

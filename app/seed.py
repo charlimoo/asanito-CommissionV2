@@ -1,3 +1,4 @@
+# start of app/seed.py
 import json
 from app import db
 from app.models import AppSetting, CommissionRuleSet
@@ -7,11 +8,10 @@ DEFAULT_SETTINGS = {
     'CURRENCY_CONVERSION_FACTOR': ['0.1', 'ضریب تبدیل ریال به تومان', 'float'],
     'RENEWAL_COMMISSION_RATE': ['0.05', 'نرخ ثابت پورسانت برای تمدیدها (مثال: 0.05 برای 5%)', 'float'],
     'BRACKET_QUALIFICATION_MIN_COLLECTION_PERCENT': ['0.30', 'حداقل درصد وصولی برای محاسبه در پله (مثال: 0.30 برای 30%)', 'float'],
-    'AGENT_SALE_MULTIPLIER': ['0.5', 'ضریب کاهش پورسانت برای فروش با نماینده (مثال: 0.5 برای 50%)', 'float'],
     'DEFAULT_COMMISSION_MODEL': ['پورسانت خالص', 'مدل پورسانت پیش‌فرض برای کارمندان تعریف نشده', 'string'],
     
-    # --- FIX IS HERE ---
-    'AGENT_KEYWORDS': [json.dumps(['نمایندگان', 'نماینده'], ensure_ascii=False), 'کلمات کلیدی برای شناسایی فروش با نماینده در ستون بازاریاب (فرمت JSON)', 'json'],
+    # REMOVED: AGENT_SALE_MULTIPLIER and AGENT_KEYWORDS
+    
     'BONUS_PERCENTAGES': [json.dumps({'collective': 0.05, 'individual': 0.03, 'top_seller': 0.02}, ensure_ascii=False), 'درصدهای پاداش (جمعی، فردی، تاپ سلر) (فرمت JSON)', 'json'],
     'BRACKET_QUALIFICATION_MIN_VALUES': [json.dumps({
         'استاندارد': 12000000, 
@@ -19,7 +19,6 @@ DEFAULT_SETTINGS = {
         'VIP': 60000000, 
         'default': 12000000
     }, ensure_ascii=False), 'حداقل مبلغ وصولی برای محاسبه در پله (تومان) (فرمت JSON)', 'json']
-    # --- END OF FIX ---
 }
 
 DEFAULT_COMMISSION_BRACKETS = [
@@ -61,3 +60,4 @@ def seed_data():
 
     db.session.commit()
     print('Seeding complete.')
+# end of app/seed.py
