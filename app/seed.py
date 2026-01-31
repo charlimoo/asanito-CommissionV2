@@ -7,17 +7,17 @@ DEFAULT_SETTINGS = {
     # key: [value, description, value_type]
     'CURRENCY_CONVERSION_FACTOR': ['0.1', 'ضریب تبدیل ریال به تومان', 'float'],
     'RENEWAL_COMMISSION_RATE': ['0.05', 'نرخ ثابت پورسانت برای تمدیدها (مثال: 0.05 برای 5%)', 'float'],
-    'BRACKET_QUALIFICATION_MIN_COLLECTION_PERCENT': ['0.30', 'حداقل درصد وصولی برای محاسبه در پله (مثال: 0.30 برای 30%)', 'float'],
+    'BRACKET_QUALIFICATION_MIN_COLLECTION_PERCENT': ['0.16', 'حداقل درصد وصولی برای محاسبه در پله (مثال: 0.30 برای 30%)', 'float'],
     'DEFAULT_COMMISSION_MODEL': ['پورسانت خالص', 'مدل پورسانت پیش‌فرض برای کارمندان تعریف نشده', 'string'],
     
     # REMOVED: AGENT_SALE_MULTIPLIER and AGENT_KEYWORDS
     
     'BONUS_PERCENTAGES': [json.dumps({'collective': 0.05, 'individual': 0.03, 'top_seller': 0.02}, ensure_ascii=False), 'درصدهای پاداش (جمعی، فردی، تاپ سلر) (فرمت JSON)', 'json'],
     'BRACKET_QUALIFICATION_MIN_VALUES': [json.dumps({
-        'استاندارد': 12000000, 
+        'استاندارد': 5000000, 
         'حرفه‌ای': 40000000, 
         'VIP': 60000000, 
-        'default': 12000000
+        'default': 5000000
     }, ensure_ascii=False), 'حداقل مبلغ وصولی برای محاسبه در پله (تومان) (فرمت JSON)', 'json']
 }
 

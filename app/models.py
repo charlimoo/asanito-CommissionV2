@@ -50,10 +50,12 @@ class PersonResult(db.Model):
     # --- ADDED FIELDS ---
     total_full_commission = db.Column(db.Float, default=0) # Potential commission at 100% collection
     total_pending_commission = db.Column(db.Float, default=0) # Commission waiting on collection
+    total_potential_bonus = db.Column(db.Float, default=0) # Potential bonus at 100% collection
     # --- END OF ADDED FIELDS ---
     
     # Foreign Key to link back to the CalculationRun
     calculation_run_id = db.Column(db.Integer, db.ForeignKey('calculation_run.id'), nullable=False)
+
 
     def __repr__(self):
         return f'<PersonResult {self.id}: {self.person_name}>'

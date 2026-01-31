@@ -1,20 +1,18 @@
+<!-- start of app/templates/report.html -->
 {% extends "base.html" %}
 {% block title %}گزارش جامع پورسانت{% endblock %}
 
 {% block content %}
-{# Embed the complete frontend data as JSON for JavaScript to consume #}
 <script>
     const frontendData = {{ frontend_data|tojson }};
 </script>
 
-{# Page Header #}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h1 class="display-6 fw-bold">گزارش جامع پورسانت</h1>
         <p class="text-muted">نتایج بر اساس فایل: <strong>{{ run.filename }}</strong> | دوره: <strong>{{ run.report_period }}</strong></p>
     </div>
     <div>
-        <!-- PDF Export link can be re-enabled later if needed -->
         {% if not is_user_view %}
         <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">محاسبه جدید</a>
         {% else %}
@@ -23,7 +21,7 @@
     </div>
 </div>
 
-{# 1. Person Filter Bar -- THIS IS THE CORE OF PHASE 5 #}
+{# Filter Section #}
 {% if not is_user_view and person_list|length > 1 %}
 <div class="card shadow-sm mb-4">
     <div class="card-header fw-bold">فیلتر افراد</div>
@@ -42,9 +40,8 @@
     </div>
 </div>
 {% endif %}
-{# END OF CONDITIONAL BLOCK #}
 
-{# 2. Performance-over-Time Chart #}
+{# Chart Section #}
 <div class="card shadow-sm mb-4">
     <div class="card-header fw-bold">نمودار فروش ماهانه (مبنای پله)</div>
     <div class="card-body">
@@ -56,31 +53,51 @@
 
 {# 3. Overall Summary Table #}
 <div class="card shadow-sm mb-4">
-    <div class="card-header fw-bold">خلاصه پورسانت پرداختی کلی</div>
+    <div class="card-header fw-bold">خلاصه پورسانت پرداختی کلی (تجمیعی)</div>
     <div class="card-body">
         <div class="table-responsive">
-            <table class="table table-hover" id="summary-table">
+            <table class="table table-hover table-bordered table-sm text-center" id="summary-table" style="font-size: 0.85rem;">
                 <thead class="table-dark">
                     <tr>
-                        <th>نام</th>
-                        <th>کل پورسانت ساخته شده</th>
-                        <th>مجموع قابل پرداخت</th>
-                        <th>پورسانت در انتظار وصول</th>
-                        <th>مجموع پرداخت شده</th>
-                        <th>باقی‌مانده لازم به پرداخت</th>
+                        <th rowspan="2" class="align-middle">نام</th>
+                        <th colspan="3">وضعیت پورسانت</th>
+                        <th colspan="3">وضعیت پاداش</th>
+                        <th colspan="3">وضعیت نهایی</th>
+                    </tr>
+                    <tr>
+                        <th title="پورسانت بر اساس کل مبنا (پتانسیل)">پورسانت مبنا</th>
+                        <th title="پورسانت قابل قبول (با احتساب وصول)">پورسانت قابل قبول</th>
+                        <th title="پورسانت وصول نشده">در انتظار وصول</th>
+                        
+                        <th title="پاداش بر اساس کل مبنا">پاداش مبنا</th>
+                        <th title="پاداش قابل قبول (با احتساب وصول)">پاداش قابل قبول</th>
+                        
+                        <th title="مجموع مبنا + پاداش مبنا">مجموع مبنا</th>
+                        <th title="مجموع قابل قبول + پاداش قابل قبول">مجموع نهایی</th>
+                        <th title="باقی‌مانده پس از پرداخت‌های انجام شده">باقی‌مانده</th>
                     </tr>
                 </thead>
                 <tbody id="summary-table-body">
                 {% for summary in overall_summary|sort(attribute='person_name') %}
                     <tr data-person-name="{{ summary.person_name }}">
-                        <td><strong>👤 {{ summary.person_name }}</strong></td>
-                        <td>{{ summary.total_full_commission|to_persian_int }} تومان</td>
-                        <td class="fw-bold">{{ summary.total_payable_commission|to_persian_int }} تومان</td>
-                        <td class="text-warning">{{ summary.total_pending_commission|to_persian_int }} تومان</td>
-                        <td>{{ summary.total_paid_commission|to_persian_int }} تومان</td>
+                        <td class="align-middle"><strong>👤 {{ summary.person_name }}</strong></td>
+                        
+                        {# Commission Cols #}
+                        <td>{{ summary.total_full_commission|to_persian_int }}</td>
+                        <td class="fw-bold text-primary">{{ summary.total_original_commission|to_persian_int }}</td>
+                        <td class="text-warning">{{ summary.total_pending_commission|to_persian_int }}</td>
+                        
+                        {# Bonus Cols #}
+                        {# Note: We calculate Potential Bonus Total on the fly for summary #}
+                        <td class="text-muted">-</td> 
+                        <td class="fw-bold text-primary">{{ summary.total_additional_bonus|to_persian_int }}</td>
+                        
+                        {# Totals #}
+                        <td class="text-muted">-</td>
+                        <td class="fw-bold table-success text-success">{{ summary.total_payable_commission|to_persian_int }}</td>
+                        
                         <td class="fw-bold {% if summary.remaining_balance > 0 %}text-success{% elif summary.remaining_balance < 0 %}text-danger{% endif %}">
-                            {% if summary.remaining_balance > 0 %}✔️ {% elif summary.remaining_balance < 0 %}⚠️ {% endif %}
-                            {{ summary.remaining_balance|to_persian_int }} تومان
+                            {{ summary.remaining_balance|to_persian_int }}
                         </td>
                     </tr>
                 {% endfor %}
@@ -90,9 +107,7 @@
     </div>
 </div>
 
-{# The rest of the report template remains the same #}
-<!-- ... -->
-{# Main Tab Navigation for Detailed Reports #}
+{# Tabs #}
 <ul class="nav nav-tabs nav-fill mb-3" id="reportTab" role="tablist">
   <li class="nav-item" role="presentation">
     <button class="nav-link active" id="detailed-calc-tab" data-bs-toggle="tab" data-bs-target="#detailed-calc-pane" type="button" role="tab">گزارش محاسبات دقیق (ماه به ماه)</button>
@@ -103,7 +118,8 @@
 </ul>
 
 <div class="tab-content" id="reportTabContent">
-  {# 4. Step-by-Step Calculation View #}
+  
+  {# 4. Detailed View #}
   <div class="tab-pane fade show active" id="detailed-calc-pane" role="tabpanel">
     <div class="accordion" id="monthAccordion">
         {% for month_key, month_data in detailed_report.items()|sort %}
@@ -113,9 +129,6 @@
                     <div class="w-100 d-flex justify-content-between align-items-center pe-3">
                         <span class="fs-5">🗓️ <strong class="ms-2">ماه {{ month_key }}</strong></span>
                         <span class="report-header-stat">
-                            <span class="text-muted">📈 کل فروش:</span> {{ month_data.total_net_sales|to_persian_int }} تومان
-                        </span>
-                        <span class="report-header-stat">
                             <span class="text-muted">💰 کل پورسانت:</span> <strong class="text-success">{{ month_data.total_commission|to_persian_int }} تومان</strong>
                         </span>
                     </div>
@@ -123,61 +136,68 @@
             </h2>
             <div id="collapse-month-{{ month_key }}" class="accordion-collapse collapse" data-bs-parent="#monthAccordion">
                 <div class="accordion-body">
-                    {# Monthly Bonus Summary #}
-                    {% if month_data.bonus_summary %}
-                    <div class="alert alert-info small">
-                        <strong>خلاصه پاداش ماه:</strong><br>
-                        - <strong>جمعی:</strong> هدف: {{ month_data.bonus_summary.collective_target|to_persian_int }} | مبلغ کل: <span class="fw-bold">{{ month_data.bonus_summary.collective_amount|to_persian_int }} تومان</span><br>
-                        - <strong>فردی:</strong> هدف: {{ month_data.bonus_summary.individual_target|to_persian_int }} | مبلغ کل: <span class="fw-bold">{{ month_data.bonus_summary.individual_amount|to_persian_int }} تومان</span><br>
-                        - <strong>تاپ سلر:</strong> {{ month_data.bonus_summary.top_seller_name }} ({{ month_data.bonus_summary.top_seller_sales|to_persian_int }}) | مبلغ کل: <span class="fw-bold">{{ month_data.bonus_summary.top_seller_amount|to_persian_int }} تومان</span>
-                    </div>
-                    {% endif %}
-
                     {% for person_name, person_data in month_data.persons.items()|sort %}
                     <div class="card mb-3 report-person-item" data-person-name="{{ person_name }}">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">👤 {{ person_name }}</h5>
-                            <div class="person-summary-stats">
-                                <span class="me-4"><span class="text-muted">مبنای پله:</span> {{ person_data.bracket_base|to_persian_int }}</span>
-                                <span class="me-4"><span class="text-muted">پاداش:</span> {{ person_data.additional_bonus|to_persian_int }}</span>
-                                <span><span class="text-muted">💰 پورسانت کل:</span> <strong class="text-success">{{ person_data.total_commission|to_persian_int }}</strong></span>
+                        <div class="card-header bg-white">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h5 class="mb-0">👤 {{ person_name }} <span class="badge bg-secondary ms-2" style="font-size: 0.7em;">{{ person_data.model }}</span></h5>
+                                <span class="badge bg-dark">{{ person_data.bracket_range_str }}</span>
+                            </div>
+                            
+                            {# FULL EXCEL FLOW TABLE #}
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-sm text-center mb-0" style="font-size: 0.8rem;">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th title="کل مبلغ خالص فاکتور">کل اعلامی</th>
+                                            <th title="کل مبلغ مبنای پورسانت">کل مبنا</th>
+                                            <th title="کل مبلغ وصول شده">کل قابل قبول</th>
+                                            <th title="پورسانت بر اساس کل مبنا (پتانسیل)">پورسانت مبنا</th>
+                                            <th title="پورسانت قابل قبول (با احتساب وصول)">پورسانت قابل قبول</th>
+                                            <th title="پاداش بر اساس کل مبنا">پاداش مبنا</th>
+                                            <th title="پاداش قابل قبول (با احتساب وصول)">پاداش قابل قبول</th>
+                                            <th title="مجموع پورسانت و پاداش مبنا">مجموع مبنا</th>
+                                            <th class="table-success" title="مجموع پورسانت و پاداش قابل قبول">مجموع نهایی</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>{{ person_data.total_net_sales|to_persian_int }}</td>
+                                            <td>{{ person_data.bracket_base|to_persian_int }}</td>
+                                            <td>{{ person_data.total_paid_amount|to_persian_int }}</td>
+                                            <td>{{ person_data.total_potential_commission|to_persian_int }}</td>
+                                            {# Original Comm = Total Comm - Bonus #}
+                                            <td>{{ (person_data.total_commission - person_data.additional_bonus)|to_persian_int }}</td>
+                                            <td class="text-muted">{{ person_data.potential_bonus|to_persian_int }}</td>
+                                            <td>{{ person_data.additional_bonus|to_persian_int }}</td>
+                                            <td class="text-muted">{{ (person_data.total_potential_commission + person_data.potential_bonus)|to_persian_int }}</td>
+                                            <td class="fw-bold table-success text-success">{{ person_data.total_commission|to_persian_int }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
+                        {# Transactions Accordion (Keep as is) #}
                         <div class="accordion" id="personAccordion-{{ month_key }}-{{ person_name.replace(' ', '-') }}">
                             {% for role, summary in person_data.roles_summary.items()|sort %}
                             <div class="accordion-item">
                                 <h2 class="accordion-header">
-                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-role-{{ month_key }}-{{ person_name.replace(' ', '-') }}-{{ role.replace(' ', '-') }}">
-                                        <div class="w-100 d-flex justify-content-between pe-3">
+                                    <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-role-{{ month_key }}-{{ person_name.replace(' ', '-') }}-{{ role.replace(' ', '-') }}">
+                                        <div class="w-100 d-flex justify-content-between pe-3" style="font-size: 0.9rem;">
                                             <span><strong>نقش:</strong> {{ role }}</span>
-                                            <span><span class="text-muted">تعداد:</span> {{ summary.transaction_count }}</span>
                                             <span><span class="text-muted">پورسانت:</span> <strong class="text-primary">{{ summary.total_commission|to_persian_int }}</strong></span>
                                         </div>
                                     </button>
                                 </h2>
                                 <div id="collapse-role-{{ month_key }}-{{ person_name.replace(' ', '-') }}-{{ role.replace(' ', '-') }}" class="accordion-collapse collapse" data-bs-parent="#personAccordion-{{ month_key }}-{{ person_name.replace(' ', '-') }}">
-                                    <div class="accordion-body">
+                                    <div class="accordion-body p-2">
                                         {% for txn in person_data.transactions if txn.role == role %}
-                                        <div class="transaction-card">
-                                            <div class="transaction-header">
-                                                <span>شرکت: <a href="{{ txn.invoice_link }}" target="_blank"><strong>{{ txn.company }}</strong></a></span>
-                                                <span class="fw-bold">پورسانت: {{ txn.payable_commission|to_persian_int }} تومان</span>
+                                        <div class="transaction-card mb-2">
+                                            <div class="transaction-header py-1 px-2">
+                                                <span><a href="{{ txn.invoice_link }}" target="_blank">{{ txn.company }}</a></span>
+                                                <span class="fw-bold">{{ txn.payable_commission|to_persian_int }}</span>
                                             </div>
-                                            <div class="calculation-details">
-                                            {% for line in txn.calculation_details.split('\n') %}
-                                                {% set parts = line.split(':', 1) %}
-                                                {% if '---' in line %}
-                                                    <hr class="calc-separator">
-                                                {% elif parts|length == 2 %}
-                                                    <div class="calc-row">
-                                                        <span class="calc-label">{{ parts[0]|trim }}:</span>
-                                                        <span class="calc-value">{{ parts[1]|trim }}</span>
-                                                    </div>
-                                                {% elif line|trim != "" %}
-                                                    <div class="calc-row-full">{{ line|trim }}</div>
-                                                {% endif %}
-                                            {% endfor %}
-                                            </div>
+                                            <div class="calculation-details p-2" style="white-space: pre-wrap;">{{ txn.calculation_details }}</div>
                                         </div>
                                         {% endfor %}
                                     </div>
@@ -194,7 +214,7 @@
     </div>
   </div>
 
-  {# 5. Person-Centric Monthly Report View #}
+  {# 5. Person-Centric Monthly Report #}
   <div class="tab-pane fade" id="person-monthly-pane" role="tabpanel">
     <div class="accordion" id="personMonthlyAccordion">
         {% for person_name, report_data in person_monthly_report.items()|sort %}
@@ -204,23 +224,42 @@
                 <div class="accordion-body">
                     {% for month, data in report_data.months.items()|sort %}
                     <div class="list-group-item list-group-item-action flex-column align-items-start mb-2 p-3 border rounded">
-                        <div class="d-flex w-100 justify-content-between">
+                        <div class="d-flex w-100 justify-content-between align-items-center mb-3">
                             <h5 class="mb-1">🗓️ ماه {{ month }}</h5>
-                            <div>
-                                <small class="me-3">مبنای پله: {{ data.bracket_base|to_persian_int }} تومان</small>
-                                <small>کل خالص فاکتور: {{ data.total_net_sales|to_persian_int }} تومان</small>
-                            </div>
+                            <span class="badge bg-secondary">{{ data.bracket_base|to_persian_int }} فروش</span>
                         </div>
-                        <p class="mb-1">
-                            <span class="me-3">پورسانت ساخته شده (پتانسیل): <strong class="text-secondary">{{ data.full_commission|to_persian_int }} تومان</strong></span>
-                        </p>
-                        <p class="mb-1">
-                            <span class="me-3">پورسانت در انتظار وصول: <strong class="text-warning">{{ data.pending_commission|to_persian_int }} تومان</strong></span>
-                        </p>
-                         <p class="mb-1">
-                             <span class="me-3">پاداش: <strong class="text-info">{{ data.additional_bonus|to_persian_int }} تومان</strong></span>
-                        </p>
-                        <p class="mb-0 fw-bold">💰 مجموع قابل پرداخت این ماه: <span class="text-success">{{ data.total_commission|to_persian_int }} تومان</span></p>
+                        
+                        {# FULL EXCEL FLOW TABLE FOR MONTHLY VIEW #}
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-sm text-center mb-0" style="font-size: 0.8rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th title="کل مبلغ خالص فاکتور">کل اعلامی</th>
+                                        <th title="کل مبلغ مبنای پورسانت">کل مبنا</th>
+                                        <th title="کل مبلغ وصول شده">کل قابل قبول</th>
+                                        <th title="پورسانت بر اساس کل مبنا (پتانسیل)">پورسانت مبنا</th>
+                                        <th title="پورسانت قابل قبول (با احتساب وصول)">پورسانت قابل قبول</th>
+                                        <th title="پاداش بر اساس کل مبنا">پاداش مبنا</th>
+                                        <th title="پاداش قابل قبول (با احتساب وصول)">پاداش قابل قبول</th>
+                                        <th title="مجموع پورسانت و پاداش مبنا">مجموع مبنا</th>
+                                        <th class="table-success" title="مجموع پورسانت و پاداش قابل قبول">مجموع نهایی</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>{{ data.total_net_sales|to_persian_int }}</td>
+                                        <td>{{ data.bracket_base|to_persian_int }}</td>
+                                        <td>{{ data.total_paid_amount|to_persian_int }}</td>
+                                        <td>{{ data.full_commission|to_persian_int }}</td>
+                                        <td>{{ data.original_commission|to_persian_int }}</td>
+                                        <td class="text-muted">{{ data.potential_bonus|to_persian_int }}</td>
+                                        <td>{{ data.additional_bonus|to_persian_int }}</td>
+                                        <td class="text-muted">{{ (data.full_commission + data.potential_bonus)|to_persian_int }}</td>
+                                        <td class="fw-bold table-success text-success">{{ data.total_commission|to_persian_int }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                     {% else %}
                     <p class="text-muted">داده‌ای برای این شخص یافت نشد.</p>
@@ -238,3 +277,4 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='js/report.js') }}"></script>
 {% endblock %}
+<!-- end of app/templates/report.html -->

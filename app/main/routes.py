@@ -90,16 +90,21 @@ def index():
                 db.session.flush()
 
                 for person_name, data in summary_data.items():
+                    # --- REPLACE THE ENTIRE person_result = PersonResult(...) BLOCK WITH THIS ---
                     person_result = PersonResult(
-                        person_name=person_name, commission_model=data['commission_model'],
+                        person_name=person_name, 
+                        commission_model=data['commission_model'],
                         total_original_commission=data['total_original_commission'],
                         total_additional_bonus=data['total_additional_bonus'],
                         total_payable_commission=data['total_payable_commission'],
                         total_paid_commission=data['total_paid_commission'],
                         total_full_commission=data['total_full_commission'],
                         total_pending_commission=data['total_pending_commission'],
-                        remaining_balance=data['remaining_balance'], calculation_run_id=new_run.id
+                        total_potential_bonus=data.get('total_potential_bonus', 0),
+                        remaining_balance=data['remaining_balance'],
+                        calculation_run_id=new_run.id  # This argument now appears only ONCE
                     )
+                    # --------------------------------------------------------------------------
                     db.session.add(person_result)
                 
                 db.session.commit()
@@ -197,17 +202,7 @@ def view_user_report(public_id, username):
         return redirect(url_for('main.index'))
         
     full_summary_data = {}
-    for res in all_person_results:
-        full_summary_data[res.person_name] = {
-            'person_name': res.person_name, 'commission_model': res.commission_model,
-            'total_original_commission': res.total_original_commission,
-            'total_additional_bonus': res.total_additional_bonus,
-            'total_payable_commission': res.total_payable_commission,
-            'total_paid_commission': res.total_paid_commission,
-            'total_full_commission': res.total_full_commission,
-            'total_pending_commission': res.total_pending_commission,
-            'remaining_balance': res.remaining_balance
-        }
+    full_summary_data = _get_summary_data_from_db(run.id) 
     
     targets_df = pd.read_json(run.targets_json, orient='records') if run.targets_json else pd.DataFrame()
     frontend_data = prepare_frontend_data(
@@ -271,7 +266,25 @@ def admin_dashboard():
     rules = CommissionRuleSet.query.order_by(CommissionRuleSet.model_name, CommissionRuleSet.min_sales).all()
     targets = MonthlyTarget.query.order_by(MonthlyTarget.year.desc(), MonthlyTarget.month.desc()).all()
     return render_template('admin.html', rules=rules, targets=targets)
-    
+
+def _get_summary_data_from_db(run_id):
+    """Helper function to reconstruct the summary dictionary from the database."""
+    person_results_query = PersonResult.query.filter_by(calculation_run_id=run_id).all()
+    summary_data = {}
+    for res in person_results_query:
+        summary_data[res.person_name] = {
+            'person_name': res.person_name, 'commission_model': res.commission_model,
+            'total_original_commission': res.total_original_commission,
+            'total_additional_bonus': res.total_additional_bonus,
+            'total_payable_commission': res.total_payable_commission,
+            'total_paid_commission': res.total_paid_commission,
+            'total_full_commission': res.total_full_commission,
+            'total_pending_commission': res.total_pending_commission,
+            'total_potential_bonus': res.total_potential_bonus, # This now correctly loads the data
+            'remaining_balance': res.remaining_balance
+        }
+    return summary_data
+
 @bp.route('/admin/report/<public_id>')
 @admin_required
 def admin_master_report(public_id):
@@ -283,19 +296,9 @@ def admin_master_report(public_id):
         return redirect(url_for('main.history'))
 
     results = json.loads(run.detailed_results_json)
-    person_results_query = PersonResult.query.filter_by(calculation_run_id=run.id).all()
-    summary_data = {}
-    for res in person_results_query:
-        summary_data[res.person_name] = {
-            'person_name': res.person_name, 'commission_model': res.commission_model,
-            'total_original_commission': res.total_original_commission,
-            'total_additional_bonus': res.total_additional_bonus,
-            'total_payable_commission': res.total_payable_commission,
-            'total_paid_commission': res.total_paid_commission,
-            'total_full_commission': res.total_full_commission,
-            'total_pending_commission': res.total_pending_commission,
-            'remaining_balance': res.remaining_balance
-        }
+    # --- REPLACE THE OLD LOGIC WITH THIS LINE ---
+    summary_data = _get_summary_data_from_db(run.id) 
+    # --------------------------------------------
     
     targets_df = pd.read_json(run.targets_json, orient='records') if run.targets_json else pd.DataFrame()
     frontend_data = prepare_frontend_data(results, summary_data, targets_df)

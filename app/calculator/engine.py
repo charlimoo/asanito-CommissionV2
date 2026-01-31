@@ -1,6 +1,6 @@
 # start of app/calculator/engine.py
 # ==============================================================================
-# app/calculator/engine.py (Updated: Removed Agent/50% Logic)
+# app/calculator/engine.py (Updated: Bonus Collection Ratio Logic)
 # ==============================================================================
 
 import pandas as pd
@@ -62,7 +62,7 @@ def _get_commission_rates_for_bracket(bracket_base, commission_model, all_rules)
 
 def calculate_commissions(dataframes):
     logging.info("="*80)
-    logging.info("STARTING COMMISSION CALCULATION PROCESS (FORENSIC MODE - NO AGENT LOGIC)")
+    logging.info("STARTING COMMISSION CALCULATION PROCESS (WITH COLLECTION RATIO FIX)")
     logging.info("="*80)
     
     config = CalculationConfig()
@@ -220,7 +220,7 @@ def calculate_commissions(dataframes):
                 txn['calculation_details'] = "\n".join(details)
     logging.info("--- Pass 2 Finished. ---")
 
-    logging.info("--- Starting Pass 3: Calculating additional bonuses... ---")
+    logging.info("--- Starting Pass 3: Calculating additional bonuses (Corrected Logic) ---")
     targets_lookup = additional_comm_df.set_index(['سال', 'ماه'])
     
     last_valid_targets = {'collective': 0, 'individual': 0}
@@ -254,7 +254,12 @@ def calculate_commissions(dataframes):
 
         if collective_target_toman == 0 and individual_target_toman == 0:
             logging.warning(f"Skipping bonus calculation for {month_key} due to zero targets.")
-            for p_data in month_data.get('persons', {}).values(): p_data['additional_bonus'] = 0
+            for p_data in month_data.get('persons', {}).values(): 
+                p_data['additional_bonus'] = 0
+                # Initialize fields to prevent errors in report
+                p_data['monthly_collection_ratio'] = 0
+                p_data['total_paid_amount'] = 0
+                p_data['potential_bonus'] = 0
             continue
 
         total_monthly_bracket_base = sum(p.get('bracket_base', 0) for p in month_data.get('persons', {}).values())
@@ -272,42 +277,65 @@ def calculate_commissions(dataframes):
         }
         
         for name, p_data in month_data.get('persons', {}).items():
-            bonus_amount, bracket_base = 0, p_data.get('bracket_base', 0)
+            bracket_base = p_data.get('bracket_base', 0)
+            
+            # --- NEW: Calculate Weighted Collection Ratio for this Person ---
+            total_net_value = sum(t.get('net_value', 0) for t in p_data.get('transactions', []))
+            total_paid_amount = sum(t.get('paid_amount', 0) for t in p_data.get('transactions', []))
+            
+            # Avoid division by zero
+            person_collection_ratio = (total_paid_amount / total_net_value) if total_net_value > 0 else 0
+            
+            # Save these for the report
+            p_data['monthly_collection_ratio'] = person_collection_ratio
+            p_data['total_paid_amount'] = total_paid_amount 
+            
+            potential_bonus_amount = 0 # Calculated on base sales (Pre-Collection)
             bonus_details_list = []
             
             coll_check = total_monthly_bracket_base >= collective_target_toman and collective_target_toman > 0
             ind_check = bracket_base >= individual_target_toman and individual_target_toman > 0
             top_check = name == top_seller_name and bracket_base > 0
-            logging.info(f"    Checking bonuses for {name} (base={bracket_base:,.0f}):")
+            
+            logging.info(f"    Checking bonuses for {name} (base={bracket_base:,.0f}, collection_ratio={person_collection_ratio:.2%}):")
             logging.info(f"      Collective Check: {total_monthly_bracket_base:,.0f} >= {collective_target_toman:,.0f} -> {coll_check}")
             logging.info(f"      Individual Check: {bracket_base:,.0f} >= {individual_target_toman:,.0f} -> {ind_check}")
             logging.info(f"      Top Seller Check: {name} == {top_seller_name} -> {top_check}")
             
+            # Calculate POTENTIAL Bonus (Based on Sales)
             if coll_check: 
                 coll_bonus = bracket_base * config.BONUS_PERCENTAGES['collective']
-                bonus_details_list.append(f"پاداش جمعی: {coll_bonus:,.0f} تومان")
-                bonus_amount += coll_bonus
+                bonus_details_list.append(f"پاداش جمعی (مبنا): {coll_bonus:,.0f} تومان")
+                potential_bonus_amount += coll_bonus
             if ind_check: 
                 ind_bonus = bracket_base * config.BONUS_PERCENTAGES['individual']
-                bonus_details_list.append(f"پاداش فردی: {ind_bonus:,.0f} تومان")
-                bonus_amount += ind_bonus
+                bonus_details_list.append(f"پاداش فردی (مبنا): {ind_bonus:,.0f} تومان")
+                potential_bonus_amount += ind_bonus
             if top_check: 
                 top_bonus = bracket_base * config.BONUS_PERCENTAGES['top_seller']
-                bonus_details_list.append(f"پاداش تاپ سلر: {top_bonus:,.0f} تومان")
-                bonus_amount += top_bonus
-                
-            p_data['additional_bonus'] = bonus_amount
-            p_data['total_commission'] += bonus_amount
+                bonus_details_list.append(f"پاداش تاپ سلر (مبنا): {top_bonus:,.0f} تومان")
+                potential_bonus_amount += top_bonus
             
-            if bonus_amount > 0:
-                bonus_details_header = "\n" + ("-"*10) + " جزئیات پاداش " + ("-"*10)
+            # --- APPLY COLLECTION RATIO ---
+            payable_bonus_amount = potential_bonus_amount * person_collection_ratio
+            
+            # Update Data Structure
+            p_data['potential_bonus'] = potential_bonus_amount # New Field for report
+            p_data['additional_bonus'] = payable_bonus_amount  # This is what gets paid (Corrected)
+            p_data['total_commission'] += payable_bonus_amount
+            
+            if potential_bonus_amount > 0:
+                bonus_details_header = "\n" + ("-"*10) + " جزئیات پاداش (اصلاح شده) " + ("-"*10)
                 bonus_details_list.insert(0, bonus_details_header)
-                bonus_details_list.append(f"مجموع پاداش: {bonus_amount:,.0f} تومان")
+                bonus_details_list.append(f"مجموع پاداش بالقوه (مبنا): {potential_bonus_amount:,.0f} تومان")
+                bonus_details_list.append(f"درصد وصولی کل ماه: {person_collection_ratio:.2%}")
+                bonus_details_list.append(f"پاداش قابل پرداخت: {payable_bonus_amount:,.0f} تومان")
+                
                 bonus_details_str = "\n".join(bonus_details_list)
                 for txn in p_data['transactions']:
                     txn['calculation_details'] += bonus_details_str
                     
-    logging.info("--- Pass 3 Finished. ---")
+    logging.info("--- Pass 3 Finished (With Collection Ratio Logic). ---")
     return results, config
 
 def summarize_results(results, commissions_paid_df, config):
@@ -324,9 +352,11 @@ def summarize_results(results, commissions_paid_df, config):
                 'total_original_commission': 0,
                 'total_additional_bonus': 0,
                 'total_full_commission': 0,
-                'total_pending_commission': 0
+                'total_pending_commission': 0,
+                'total_potential_bonus': 0 
             })
             
+            # Note: total_commission now includes the bonus, so we subtract additional_bonus to get original
             original_commission = person_data['total_commission'] - person_data.get('additional_bonus', 0)
             person_summary['total_original_commission'] += original_commission
             person_summary['total_additional_bonus'] += person_data.get('additional_bonus', 0)
