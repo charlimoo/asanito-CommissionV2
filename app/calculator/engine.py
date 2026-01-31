@@ -352,8 +352,7 @@ def summarize_results(results, commissions_paid_df, config):
                 'total_original_commission': 0,
                 'total_additional_bonus': 0,
                 'total_full_commission': 0,
-                'total_pending_commission': 0,
-                'total_potential_bonus': 0 
+                'total_pending_commission': 0
             })
             
             # Note: total_commission now includes the bonus, so we subtract additional_bonus to get original

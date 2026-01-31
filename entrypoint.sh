@@ -2,28 +2,19 @@
 set -e
 
 INSTANCE_DIR="/app/instance"
-DB_FILE="$INSTANCE_DIR/app.db"
+DB_FILE="$INSTANCE_DIR/app.db"   # <--- change to your actual DB filename
 
-echo "Checking instance directory..."
+echo "Preparing instance directory..."
 mkdir -p "$INSTANCE_DIR"
 
-# Step 1: Attempt to upgrade the database normally
-echo "Applying database migrations..."
-if ! flask db upgrade; then
-    echo "Migration failed (likely out of sync with existing table). Attempting to sync..."
-    
-    # Step 2: If upgrade fails, tell Alembic to assume the DB is at the latest version
-    # This creates the 'alembic_version' table if it's missing or updates the hash
-    flask db stamp head
-    
-    # Step 3: Attempt upgrade again to catch any actual missing columns
+if [ ! -f "$DB_FILE" ]; then
+    echo "No database found. Running initial migrations and seeding..."
+    flask db upgrade
+    flask seed
+else
+    echo "Database found. Running migrations only..."
     flask db upgrade
 fi
-
-# Step 4: Run seed every time. 
-# Your app/seed.py logic already checks 'if not setting', so it won't duplicate data.
-echo "Seeding/Updating default settings..."
-flask seed
 
 echo "Starting application..."
 exec "$@"
