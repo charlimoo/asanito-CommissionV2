@@ -212,3 +212,162 @@ a:hover {
   align-items: center;
   gap: 0.5rem;
 }
+
+
+/* ==============================================================================
+ * MODERN REPORT UI REWORK (2026)
+ * ============================================================================== */
+
+:root {
+    --report-bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --border-subtle: #e9ecef;
+    
+    /* Semantic Colors */
+    --color-input: #6c757d;       /* Grey for inputs */
+    --color-commission: #4361ee;  /* Blue for commission */
+    --color-bonus: #f72585;       /* Pink/Magenta for bonus */
+    --color-final: #10b981;       /* Green for payable */
+    --color-balance: #f59e0b;     /* Orange for balance */
+    --color-text-main: #1f2937;
+}
+
+/* --- Card & Container Styling --- */
+.report-card {
+    background: var(--card-bg);
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    margin-bottom: 24px;
+    overflow: hidden;
+    padding: 20px;
+}
+
+.report-header-gradient {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 20px;
+}
+
+/* --- Modern Table Styling --- */
+.modern-table {
+    width: 100%;
+    margin-bottom: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.85rem;
+}
+
+.modern-table thead th {
+    background-color: #ffffff;
+    color: var(--color-input);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 12px 16px;
+    border-bottom: 2px solid var(--border-subtle);
+    font-size: 0.75rem;
+}
+
+/* Group Headers with Top Borders */
+.th-group-input { border-top: 4px solid var(--color-input); }
+.th-group-comm { border-top: 4px solid var(--color-commission); color: var(--color-commission) !important; }
+.th-group-bonus { border-top: 4px solid var(--color-bonus); color: var(--color-bonus) !important; }
+.th-group-final { border-top: 4px solid var(--color-final); color: var(--color-final) !important; background-color: #f0fdf4 !important; }
+
+.modern-table tbody td {
+    padding: 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: middle;
+    color: var(--color-text-main);
+    font-family: 'Vazirmatn', sans-serif;
+    font-variant-numeric: tabular-nums; /* Aligns numbers perfectly */
+}
+
+.modern-table tbody tr:hover td {
+    background-color: #f8fafc;
+}
+
+/* --- Metric Highlights (The Numbers) --- */
+.val-muted { color: #9ca3af; font-size: 0.85rem; }
+.val-primary { color: var(--color-commission); font-weight: 500; }
+.val-bonus { color: var(--color-bonus); font-weight: 500; }
+.val-final { 
+    color: var(--color-final); 
+    font-weight: 700; 
+    font-size: 1rem;
+    background-color: #ecfdf5;
+    padding: 6px 12px;
+    border-radius: 8px;
+    display: inline-block;
+}
+.val-balance { color: var(--color-balance); font-weight: 600; }
+
+/* --- Person Row Styling in Detailed View --- */
+.person-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 15px;
+    margin-bottom: 15px;
+    border-bottom: 1px dashed var(--border-subtle);
+}
+
+.person-name-badge {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.role-badge {
+    background-color: #eff6ff;
+    color: var(--color-commission);
+    font-size: 0.75rem;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+}
+
+.tier-badge {
+    background-color: #374151;
+    color: white;
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    border-radius: 20px;
+}
+
+/* --- Transaction Drilldown --- */
+.transaction-list {
+    background-color: #fafafa;
+    border-radius: 12px;
+    padding: 10px;
+    margin-top: 10px;
+}
+
+.transaction-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid #eee;
+    font-size: 0.85rem;
+}
+.transaction-item:last-child { border-bottom: none; }
+
+/* --- Accordion Overrides --- */
+.accordion-item {
+    border: 1px solid var(--border-subtle);
+    box-shadow: none;
+    margin-bottom: 12px !important;
+    border-radius: 12px !important;
+}
+.accordion-button {
+    background-color: white;
+    border-radius: 12px !important;
+    padding: 16px 20px;
+    font-weight: 600;
+}
+.accordion-button:not(.collapsed) {
+    background-color: #eff6ff;
+    color: var(--color-commission);
+    box-shadow: none;
+}

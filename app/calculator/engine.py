@@ -1,6 +1,13 @@
 # start of app/calculator/engine.py
 # ==============================================================================
-# app/calculator/engine.py (Updated: Bonus Collection Ratio Logic)
+# app/calculator/engine.py (REVERTED LOGIC VERSION)
+# ------------------------------------------------------------------------------
+# Core calculation engine for the Asanito Commission System.
+# This version reverts the core calculation logic to the "Old Version" where:
+#   1. Bracket/Tier is determined by SN-Only sales.
+#   2. Bonuses are calculated on the SN-Only base.
+#   3. Bonus collection uses a simple monthly average ratio.
+# It RETAINS the new, detailed logging for auditability.
 # ==============================================================================
 
 import pandas as pd
@@ -8,368 +15,338 @@ import json
 import logging
 from app.models import CommissionRuleSet, AppSetting
 
-# --- Configuration Loader Class ---
+# ==============================================================================
+# HELPER FUNCTIONS (No changes needed here)
+# ==============================================================================
+
+def _normalize_text(text):
+    if pd.isna(text) or text is None:
+        return ""
+    return str(text).replace('ي', 'ی').replace('ك', 'ک').strip()
+
+def _parse_monetary(value, conversion_factor):
+    if pd.isna(value): return 0.0
+    try:
+        clean_val = float(str(value).replace(',', ''))
+        return clean_val * conversion_factor
+    except (ValueError, TypeError):
+        return 0.0
+
+def _get_commission_rates(bracket_base, commission_model, all_rules_dict):
+    brackets = all_rules_dict.get(commission_model, [])
+    brackets.sort(key=lambda x: x.min_sales)
+    for rule in brackets:
+        if rule.min_sales <= bracket_base < rule.max_sales:
+            return {
+                'بازاریاب': rule.marketer_rate, 
+                'مذاکره کننده ارشد': rule.negotiator_rate, 
+                'هماهنگ کننده فروش': rule.coordinator_rate
+            }, f"[{rule.min_sales:,.0f} - {rule.max_sales:,.0f}]"
+    return {'بازاریاب': 0, 'مذاکره کننده ارشد': 0, 'هماهنگ کننده فروش': 0}, "OUT OF RANGE"
+
+# ==============================================================================
+# CONFIGURATION CLASS (No changes needed here)
+# ==============================================================================
 
 class CalculationConfig:
-    """
-    A singleton class to load and hold all business rules from the database.
-    """
     _instance = None
-
     def __new__(cls):
         if cls._instance is None:
-            logging.info("Creating and loading CalculationConfig instance...")
             cls._instance = super(CalculationConfig, cls).__new__(cls)
-            try:
-                cls._instance.load_settings()
-                logging.info("CalculationConfig loaded successfully.")
-            except Exception as e:
-                logging.error(f"FATAL: Could not load settings from database. Engine cannot run. Error: {e}", exc_info=True)
-                raise
+            cls._instance.load_settings()
         return cls._instance
 
     def load_settings(self):
-        """Loads all settings from the AppSetting table into attributes."""
         settings = AppSetting.query.all()
         settings_dict = {s.key: s.get_value() for s in settings}
-        
         self.CURRENCY_CONVERSION_FACTOR = settings_dict.get('CURRENCY_CONVERSION_FACTOR', 0.1)
         self.RENEWAL_COMMISSION_RATE = settings_dict.get('RENEWAL_COMMISSION_RATE', 0.05)
         self.BRACKET_QUALIFICATION_MIN_COLLECTION_PERCENT = settings_dict.get('BRACKET_QUALIFICATION_MIN_COLLECTION_PERCENT', 0.3)
         self.DEFAULT_COMMISSION_MODEL = settings_dict.get('DEFAULT_COMMISSION_MODEL', 'پورسانت خالص')
-        
-        # REMOVED: AGENT_SALE_MULTIPLIER and AGENT_KEYWORDS
-        
         self.BONUS_PERCENTAGES = settings_dict.get('BONUS_PERCENTAGES', {'collective': 0.05, 'individual': 0.03, 'top_seller': 0.02})
         self.BRACKET_QUALIFICATION_MIN_VALUES = settings_dict.get('BRACKET_QUALIFICATION_MIN_VALUES', {'استاندارد': 12000000, 'حرفه‌ای': 40000000, 'VIP': 60000000, 'default': 12000000})
 
-# --- Helper Functions ---
-
-def _parse_monetary(value, config):
-    if pd.isna(value): return 0.0
-    return float(str(value).replace(',', '')) * config.CURRENCY_CONVERSION_FACTOR
-
-def _get_commission_rates_for_bracket(bracket_base, commission_model, all_rules):
-    brackets_to_use = all_rules.get(commission_model, [])
-    for rule in brackets_to_use:
-        if rule.min_sales <= bracket_base < rule.max_sales:
-            return {'بازاریاب': rule.marketer_rate, 'مذاکره کننده ارشد': rule.negotiator_rate, 'هماهنگ کننده فروش': rule.coordinator_rate}
-    logging.warning(f"No matching commission bracket found for model '{commission_model}' with base {bracket_base:,.0f}.")
-    return {'بازاریاب': 0, 'مذاکره کننده ارشد': 0, 'هماهنگ کننده فروش': 0}
-
-
-# --- Main Calculation Orchestrator ---
+# ==============================================================================
+# MAIN ENGINE LOGIC (REVERTED)
+# ==============================================================================
 
 def calculate_commissions(dataframes):
-    logging.info("="*80)
-    logging.info("STARTING COMMISSION CALCULATION PROCESS (WITH COLLECTION RATIO FIX)")
-    logging.info("="*80)
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+    
+    logger.info("\n" + "#"*80)
+    logger.info("### STARTING CALCULATION ENGINE (REVERTED LOGIC - AUDIT MODE) ###")
+    logger.info("#"*80)
     
     config = CalculationConfig()
-
-    logging.info("\n" + "="*30 + " CURRENT CONFIGURATION STATE " + "="*30)
-    all_settings = AppSetting.query.all()
-    logging.info("--- App Settings from DB ---")
-    for s in all_settings: logging.info(f"  - {s.key}: {s.value} (Type: {s.value_type})")
-
+    
     all_rules = CommissionRuleSet.query.all()
-    logging.info("\n--- Commission Rules from DB ---")
-    for r in all_rules: logging.info(f"  - Model: {r.model_name}, Range: {r.min_sales:,.0f}-{r.max_sales:,.0f}, Rates: M={r.marketer_rate:.2%}, N={r.negotiator_rate:.2%}, C={r.coordinator_rate:.2%}")
-
-    additional_comm_df = dataframes.get('Additional commissions')
-    logging.info("\n--- Additional Commissions Sheet Content ---")
-    logging.info("\n" + additional_comm_df.to_string())
+    all_rules_dict = {m: [] for m in set(r.model_name for r in all_rules)}
+    for rule in all_rules: all_rules_dict[rule.model_name].append(rule)
     
     employee_models_df = dataframes['Employee Models']
-    logging.info("\n--- Employee Models Sheet Content ---")
-    logging.info("\n" + employee_models_df.to_string())
-    logging.info("="*80 + "\n")
+    employee_models = {_normalize_text(row['نام']): row['مدل همکاری'] for _, row in employee_models_df.iterrows()}
     
+    additional_comm_df = dataframes.get('Additional commissions')
     sales_df = dataframes['Sales data']
-    employee_models = dict(zip(employee_models_df['نام'], employee_models_df['مدل همکاری']))
     results = {}
 
-    all_rules_dict = {}
-    for rule in all_rules:
-        all_rules_dict.setdefault(rule.model_name, []).append(rule)
+    # --------------------------------------------------------------------------
+    # PASS 1: ROW PROCESSING (Qualification & SN-Only Aggregation)
+    # --------------------------------------------------------------------------
+    logger.info("\n>>> PASS 1: PROCESSING ROWS (Qualification Check)")
     
-    logging.info("--- Starting Pass 1: Processing transactions and calculating bracket bases. ---")
     for index, row in sales_df.iterrows():
         excel_row_num = index + 2
-        
-        row_summary = (
-            f"Processing Excel Row: {excel_row_num} | "
-            f"Company: '{row.get('شرکت خریدار', 'N/A')}' | "
-            f"Net Value: {row.get('مبلغ کل خالص فاکتور', 0)} | "
-            f"Paid: {row.get('وصول شده', 0)} | "
-            f"SN: '{row.get('مذاکره کننده ارشد', 'N/A')}' | "
-            f"Plan: '{row.get('نسخه پلن', 'N/A')}'"
-        )
-        logging.debug(f"\n{row_summary}")
-        
-        if 'مذاکره کننده ارشد' not in row.index:
-            logging.error(f"FATAL FLAW in Excel file: Column 'مذاکره کننده ارشد' not found!")
-            continue
-
+        if 'مذاکره کننده ارشد' not in row.index: continue
         try:
-            month = str(int(row.get('ماه'))).strip()
-            year = str(int(row.get('سال'))).strip()
-        except (ValueError, TypeError):
-            logging.warning(f"SKIPPING Row {excel_row_num}: Invalid or missing 'ماه'/'سال'.")
-            continue
-        
-        month_key = f"{year}-{month}"
+            month_key = f"{int(row.get('سال'))}-{int(row.get('ماه'))}"
+        except: continue
 
-        net_value = _parse_monetary(row.get('مبلغ کل خالص فاکتور', 0), config)
-        commission_base = _parse_monetary(row.get('کل مبلغ مبنای پورسانت', 0), config)
-        paid_amount = _parse_monetary(row.get('وصول شده', 0), config)
+        company = str(row.get('شرکت خریدار', 'Unknown')).strip()
+        net_invoice = _parse_monetary(row.get('مبلغ کل خالص فاکتور', 0), config.CURRENCY_CONVERSION_FACTOR)
+        commission_base = _parse_monetary(row.get('کل مبلغ مبنای پورسانت', 0), config.CURRENCY_CONVERSION_FACTOR)
+        paid_amount = _parse_monetary(row.get('وصول شده', 0), config.CURRENCY_CONVERSION_FACTOR)
         is_renewal = str(row.get('تمدید اشتراک', 'خیر')).strip() == 'بله'
+        plan_version = str(row.get('نسخه پلن', 'default')).strip()
         
-        if 'نسخه پلن' in row and not pd.isna(row.get('نسخه پلن')):
-            plan_version = str(row['نسخه پلن']).strip()
-        else:
-            plan_version = 'default'
+        ratio = (paid_amount / net_invoice) if net_invoice > 0 else 0.0
+        min_threshold = config.BRACKET_QUALIFICATION_MIN_VALUES.get(plan_version, config.BRACKET_QUALIFICATION_MIN_VALUES.get('default', 0))
         
-        # REMOVED: Agent Detection Logic
+        is_acceptable = (ratio >= config.BRACKET_QUALIFICATION_MIN_COLLECTION_PERCENT) and (paid_amount >= min_threshold)
 
-        min_collection_value = config.BRACKET_QUALIFICATION_MIN_VALUES.get(plan_version, config.BRACKET_QUALIFICATION_MIN_VALUES.get('default', 0))
-        collection_ratio = (paid_amount / net_value) if net_value > 0 else 0
+        log_status = "✅ ACCEPTABLE" if is_acceptable else "❌ REJECTED"
+        reject_reason = []
+        if not (ratio >= config.BRACKET_QUALIFICATION_MIN_COLLECTION_PERCENT): reject_reason.append(f"Ratio {ratio:.1%} < {config.BRACKET_QUALIFICATION_MIN_COLLECTION_PERCENT:.1%}")
+        if not (paid_amount >= min_threshold): reject_reason.append(f"Paid {paid_amount:,.0f} < Threshold {min_threshold:,.0f}")
+        reason_str = f"({', '.join(reject_reason)})" if reject_reason else ""
         
-        is_renewal_check = not is_renewal
-        collection_ratio_check = collection_ratio >= config.BRACKET_QUALIFICATION_MIN_COLLECTION_PERCENT
-        min_value_check = paid_amount >= min_collection_value
-        qualifies_for_bracket = is_renewal_check and collection_ratio_check and min_value_check
-        
-        log_story = [
-            f"\n--- Audit Log for Row {excel_row_num} ({row.get('شرکت خریدار', 'N/A')}) ---",
-            f"  - Net Value  : {net_value:,.0f} Toman",
-            f"  - Paid Amount: {paid_amount:,.0f} Toman",
-            f"  - Is Renewal : {is_renewal}",
-            f"  - Plan Version: '{plan_version}'",
-            "  --- Qualification Checks ---",
-            f"  1. Is NOT Renewal? ({not is_renewal}) -> {'PASS' if is_renewal_check else 'FAIL'}",
-            f"  2. Collection Ratio Check: {collection_ratio:.2%} >= {config.BRACKET_QUALIFICATION_MIN_COLLECTION_PERCENT:.2%} -> {'PASS' if collection_ratio_check else 'FAIL'}",
-            f"  3. Min Value Check: {paid_amount:,.0f} >= {min_collection_value:,.0f} (for plan '{plan_version}') -> {'PASS' if min_value_check else 'FAIL'}",
-            f"  => FINAL QUALIFICATION: {'QUALIFIES' if qualifies_for_bracket else 'DOES NOT QUALIFY'}",
-            "  ------------------------------------"
-        ]
-        logging.debug("\n".join(log_story))
-        
-        person_assigned_in_row = False
-        for role in ['بازاریاب', 'مذاکره کننده ارشد', 'هماهنگ کننده فروش']:
-            person_name = str(row.get(role, '')).strip()
+        logger.info(f"Row {excel_row_num:03d} | {company[:20]:<20} | {log_status} {reason_str}")
+
+        roles = ['بازاریاب', 'مذاکره کننده ارشد', 'هماهنگ کننده فروش']
+        for role in roles:
+            raw_name = row.get(role)
+            if pd.isna(raw_name) or str(raw_name).lower() == 'nan': continue
             
-            if not person_name or person_name.lower() == 'nan':
-                continue
-            
-            person_assigned_in_row = True
+            person_name = _normalize_text(raw_name)
+            if not person_name: continue
+
             results.setdefault(month_key, {'persons': {}})
             person_data = results[month_key]['persons'].setdefault(person_name, {
                 'model': employee_models.get(person_name, config.DEFAULT_COMMISSION_MODEL),
-                'bracket_base': 0, 'transactions': []
+                'bracket_base': 0, # REVERTED: This is the SN-Only ladder base
+                'transactions': []
             })
             
-            if role == 'مذاکره کننده ارشد' and qualifies_for_bracket:
-                # UPDATED: Always add the full commission base, no multiplier
+            # --- REVERTED LOGIC ---
+            # Only add to the bracket base if the role is Senior Negotiator and the deal is acceptable.
+            # Renewals are included in the ladder base in this old logic.
+            if role == 'مذاکره کننده ارشد' and is_acceptable:
                 person_data['bracket_base'] += commission_base
-                logging.debug(f"  > QUALIFIED: Adding {commission_base:,.0f} to bracket_base for {person_name}.")
-
+            
             person_data['transactions'].append({
-                'role': role, 'net_value': net_value, 'commission_base': commission_base, 
-                'paid_amount': paid_amount, 'is_renewal': is_renewal, 
-                'company': str(row.get('شرکت خریدار', '')).strip(), 
-                'invoice_link': str(row.get('لینک فاکتور', '')).strip()
+                'role': role, 'company': company, 'net_value': net_invoice,
+                'commission_base': commission_base, 'paid_amount': paid_amount,
+                'collection_ratio': ratio, 'is_renewal': is_renewal,
+                'is_acceptable': is_acceptable, 'plan_version': plan_version,
+                'invoice_link': str(row.get('لینک فاکتور', ''))
             })
 
-        if not person_assigned_in_row:
-            logging.warning(f"WARNING: No person was assigned any role in Excel Row {excel_row_num}.")
-
-    logging.info(f"--- Pass 1 Finished. ---")
+    # --------------------------------------------------------------------------
+    # PASS 2: COMMISSION CALCULATION
+    # --------------------------------------------------------------------------
+    logger.info("\n>>> PASS 2: CALCULATING COMMISSIONS (Per Person)")
     
-    logging.info("--- Starting Pass 2: Calculating base commissions... ---")
-    for month_key, month_data in results.items():
+    # 1. We need a history tracker to calculate averages across months
+    # Structure: { 'Person Name': { 'total_bracket_base_so_far': [], 'months_seen': [] } }
+    person_history = {}
+
+    # 2. Sort months to ensure chronological processing (e.g. 1404-1, 1404-2...)
+    sorted_months = sorted(results.keys())
+
+    for month_key in sorted_months:
+        month_data = results[month_key]
+        logger.info(f"--- Month: {month_key} ---")
+        
         for person_name, person_data in month_data['persons'].items():
-            rates = _get_commission_rates_for_bracket(person_data['bracket_base'], person_data['model'], all_rules_dict)
-            person_data['total_commission'] = 0
+            
+            # --- HISTORY TRACKING FOR GRADING ---
+            if person_name not in person_history:
+                person_history[person_name] = []
+            
+            # Add current month's SN-Only Base to history
+            current_bracket_base = person_data['bracket_base']
+            person_history[person_name].append(current_bracket_base)
+            
+            # --- DETERMINE EFFECTIVE BASE FOR TIERING ---
+            commission_model = person_data['model']
+            effective_base_for_tier = current_bracket_base
+            calculation_note = "Monthly Base"
+
+            # [FIX] Apply 3-Month Rolling Average for "Fixed Salary" Model
+            if commission_model == 'حقوق ثابت + پورسانت':
+                # Get the last 3 months of sales (including current)
+                last_3_months = person_history[person_name][-3:] 
+                if last_3_months:
+                    average_sales = sum(last_3_months) / len(last_3_months)
+                    effective_base_for_tier = average_sales
+                    calculation_note = f"3-Month Avg (Last 3: {[f'{x:,.0f}' for x in last_3_months]})"
+
+            # --- GET RATES BASED ON EFFECTIVE BASE ---
+            # We use effective_base_for_tier to find the % Rate, 
+            # BUT we apply that % Rate to the actual current_bracket_base (and transactions)
+            rates, bracket_str = _get_commission_rates(effective_base_for_tier, commission_model, all_rules_dict)
+            
+            logger.info(
+                f"  > {person_name} ({commission_model}): "
+                f"Actual Base: {current_bracket_base:,.0f} | "
+                f"Tier Base: {effective_base_for_tier:,.0f} ({calculation_note}) -> Tier {bracket_str}"
+            )
+
+            # --- APPLY RATES TO TRANSACTIONS ---
             for txn in person_data['transactions']:
-                original_rate = config.RENEWAL_COMMISSION_RATE if txn['is_renewal'] else rates.get(txn['role'], 0)
+                if txn['is_renewal']:
+                    rate = config.RENEWAL_COMMISSION_RATE
+                else:
+                    rate = rates.get(txn['role'], 0)
                 
-                # UPDATED: No Agent Multiplier applied here
-                current_rate = original_rate 
+                # Standard calculation logic continues...
+                comm_base = txn['commission_base'] * rate
+                comm_acceptable = comm_base if txn['is_acceptable'] else 0.0
+                effective_ratio = min(1.0, txn['collection_ratio'])
+                comm_collected = comm_acceptable * effective_ratio
                 
-                collection_ratio = (txn['paid_amount'] / txn['net_value']) if txn['net_value'] > 0 else 1.0
-                full_commission = txn['commission_base'] * current_rate
-                payable_commission = full_commission * collection_ratio
-                commission_remaining = full_commission - payable_commission
-                
-                txn['rate_used'] = current_rate
-                txn['payable_commission'] = payable_commission
-                txn['full_commission'] = full_commission
-                txn['commission_remaining'] = commission_remaining
-                person_data['total_commission'] += payable_commission
+                txn['full_commission'] = comm_base
+                txn['acceptable_commission'] = comm_acceptable
+                txn['payable_commission'] = comm_collected
+                txn['rate_used'] = rate
+                txn['calculation_details'] = f"Base: {comm_base:,.0f}, Rate: {rate*100:.2f}% (Tier Base: {effective_base_for_tier:,.0f}), Collected: {comm_collected:,.0f}"
 
-                details = [
-                    f"مبلغ مبنای پورسانت: {txn['commission_base']:,.0f} تومان",
-                    f"نرخ پورسانت (نقش {txn['role']}): {current_rate:.2%}",
-                    f"محاسبه پورسانت کامل: {txn['commission_base']:,.0f} * {current_rate:.2%} = {full_commission:,.0f} تومان",
-                    "-" * 20,
-                    f"نسبت وصول: {collection_ratio:.2%} ({txn['paid_amount']:,.0f} / {txn['net_value']:,.0f})",
-                    f"پورسانت قابل پرداخت: {full_commission:,.0f} * {collection_ratio:.2%} = {payable_commission:,.0f} تومان",
-                    f"پورسانت باقی مانده: {full_commission:,.0f} - {payable_commission:,.0f} = {commission_remaining:,.0f} تومان"
-                ]
-                txn['calculation_details'] = "\n".join(details)
-    logging.info("--- Pass 2 Finished. ---")
-
-    logging.info("--- Starting Pass 3: Calculating additional bonuses (Corrected Logic) ---")
-    targets_lookup = additional_comm_df.set_index(['سال', 'ماه'])
+    # --------------------------------------------------------------------------
+    # PASS 3: BONUS CALCULATION (REVERTED)
+    # --------------------------------------------------------------------------
+    logger.info("\n>>> PASS 3: CALCULATING BONUSES (Reverted Logic)")
     
+    targets_lookup = additional_comm_df.set_index(['سال', 'ماه'])
     last_valid_targets = {'collective': 0, 'individual': 0}
+
     for month_key in sorted(results.keys()):
         month_data = results[month_key]
         year, month = map(int, month_key.split('-'))
         
-        logging.info(f"\n----- BONUS CALC FOR MONTH: {month_key} -----")
-        
-        # This is a snapshot of the memory from the PREVIOUS month's loop
-        logging.info(f"  [START] Initial raw targets (from prev month): C={last_valid_targets['collective']:,.0f}, I={last_valid_targets['individual']:,.0f}")
-
         if (year, month) in targets_lookup.index:
-            target_data = targets_lookup.loc[(year, month)]
-            logging.info(f"  Found targets in Excel for {month_key}: C_raw={target_data.get('تارگت جمعی')}, I_raw={target_data.get('تارگت فرعی')}")
+            t_data = targets_lookup.loc[(year, month)]
+            if not pd.isna(t_data.get('تارگت جمعی')): last_valid_targets['collective'] = t_data.get('تارگت جمعی')
+            if not pd.isna(t_data.get('تارگت فرعی')): last_valid_targets['individual'] = t_data.get('تارگت فرعی')
             
-            # ** THE FIX IS HERE **
-            # Only update the 'last_valid_targets' dictionary with new, valid numbers.
-            current_collective = target_data.get('تارگت جمعی')
-            if not pd.isna(current_collective):
-                last_valid_targets['collective'] = current_collective
-            current_individual = target_data.get('تارگت فرعی')
-            if not pd.isna(current_individual):
-                last_valid_targets['individual'] = current_individual
-        else:
-            logging.info(f"  No targets found in Excel for {month_key}. Using carried-over values.")
+        target_coll = last_valid_targets['collective'] * config.CURRENCY_CONVERSION_FACTOR
+        target_ind = last_valid_targets['individual'] * config.CURRENCY_CONVERSION_FACTOR
         
-        collective_target_toman = last_valid_targets['collective'] * config.CURRENCY_CONVERSION_FACTOR
-        individual_target_toman = last_valid_targets['individual'] * config.CURRENCY_CONVERSION_FACTOR
-        logging.info(f"  [FINAL] Using Toman targets for {month_key}: Collective={collective_target_toman:,.0f}, Individual={individual_target_toman:,.0f}")
-
-        if collective_target_toman == 0 and individual_target_toman == 0:
-            logging.warning(f"Skipping bonus calculation for {month_key} due to zero targets.")
-            for p_data in month_data.get('persons', {}).values(): 
-                p_data['additional_bonus'] = 0
-                # Initialize fields to prevent errors in report
-                p_data['monthly_collection_ratio'] = 0
-                p_data['total_paid_amount'] = 0
-                p_data['potential_bonus'] = 0
-            continue
-
-        total_monthly_bracket_base = sum(p.get('bracket_base', 0) for p in month_data.get('persons', {}).values())
-        top_seller_name, top_seller_sales = None, 0
-        for name, p_data in month_data.get('persons', {}).items():
-            if p_data.get('bracket_base', 0) > top_seller_sales:
-                top_seller_sales = p_data['bracket_base']; top_seller_name = name
-        logging.info(f"  Monthly Bracket Base Total: {total_monthly_bracket_base:,.0f}. Top Seller: {top_seller_name}")
-
-        month_data['bonus_summary'] = {
-            'collective_target': collective_target_toman, 'individual_target': individual_target_toman,
-            'collective_amount': 0, 'individual_amount': 0, 'top_seller_amount': 0,
-            'top_seller_name': top_seller_name, 'top_seller_sales': top_seller_sales,
-            'bonus_percentages': config.BONUS_PERCENTAGES
-        }
+        # --- REVERTED LOGIC ---
+        # Top Seller is based on the SN-Only 'bracket_base'
+        top_seller_name, top_seller_val = None, -1
+        month_total_bracket_base = 0
         
-        for name, p_data in month_data.get('persons', {}).items():
-            bracket_base = p_data.get('bracket_base', 0)
+        for name, p in month_data['persons'].items():
+            month_total_bracket_base += p['bracket_base']
+            if p['bracket_base'] > top_seller_val:
+                top_seller_val, top_seller_name = p['bracket_base'], name
+
+        logger.info(f"--- Month {month_key} Bonus Context (Reverted) ---")
+        logger.info(f"  Team SN-Only Base: {month_total_bracket_base:,.0f} vs Target: {target_coll:,.0f}")
+        logger.info(f"  Top Seller (SN-Only): {top_seller_name} ({top_seller_val:,.0f})")
+
+        for name, p in month_data['persons'].items():
+            # --- REVERTED LOGIC ---
+            # Bonus is calculated on the SN-Only 'bracket_base'
+            bracket_base = p['bracket_base']
             
-            # --- NEW: Calculate Weighted Collection Ratio for this Person ---
-            total_net_value = sum(t.get('net_value', 0) for t in p_data.get('transactions', []))
-            total_paid_amount = sum(t.get('paid_amount', 0) for t in p_data.get('transactions', []))
+            potential_bonus = 0
+            reasons = []
+            if target_coll > 0 and month_total_bracket_base >= target_coll:
+                potential_bonus += bracket_base * config.BONUS_PERCENTAGES['collective']
+                reasons.append("Coll")
+            if target_ind > 0 and bracket_base >= target_ind:
+                potential_bonus += bracket_base * config.BONUS_PERCENTAGES['individual']
+                reasons.append("Ind")
+            if top_seller_val > 0 and name == top_seller_name:
+                potential_bonus += bracket_base * config.BONUS_PERCENTAGES['top_seller']
+                reasons.append("Top")
             
-            # Avoid division by zero
-            person_collection_ratio = (total_paid_amount / total_net_value) if total_net_value > 0 else 0
+            # --- REVERTED LOGIC ---
+            # Use simple monthly collection ratio
+            total_net = sum(txn['net_value'] for txn in p['transactions'])
+            total_paid = sum(txn['paid_amount'] for txn in p['transactions'])
+            person_ratio = (total_paid / total_net) if total_net > 0 else 0.0
             
-            # Save these for the report
-            p_data['monthly_collection_ratio'] = person_collection_ratio
-            p_data['total_paid_amount'] = total_paid_amount 
+            payable_bonus = potential_bonus * person_ratio
             
-            potential_bonus_amount = 0 # Calculated on base sales (Pre-Collection)
-            bonus_details_list = []
-            
-            coll_check = total_monthly_bracket_base >= collective_target_toman and collective_target_toman > 0
-            ind_check = bracket_base >= individual_target_toman and individual_target_toman > 0
-            top_check = name == top_seller_name and bracket_base > 0
-            
-            logging.info(f"    Checking bonuses for {name} (base={bracket_base:,.0f}, collection_ratio={person_collection_ratio:.2%}):")
-            logging.info(f"      Collective Check: {total_monthly_bracket_base:,.0f} >= {collective_target_toman:,.0f} -> {coll_check}")
-            logging.info(f"      Individual Check: {bracket_base:,.0f} >= {individual_target_toman:,.0f} -> {ind_check}")
-            logging.info(f"      Top Seller Check: {name} == {top_seller_name} -> {top_check}")
-            
-            # Calculate POTENTIAL Bonus (Based on Sales)
-            if coll_check: 
-                coll_bonus = bracket_base * config.BONUS_PERCENTAGES['collective']
-                bonus_details_list.append(f"پاداش جمعی (مبنا): {coll_bonus:,.0f} تومان")
-                potential_bonus_amount += coll_bonus
-            if ind_check: 
-                ind_bonus = bracket_base * config.BONUS_PERCENTAGES['individual']
-                bonus_details_list.append(f"پاداش فردی (مبنا): {ind_bonus:,.0f} تومان")
-                potential_bonus_amount += ind_bonus
-            if top_check: 
-                top_bonus = bracket_base * config.BONUS_PERCENTAGES['top_seller']
-                bonus_details_list.append(f"پاداش تاپ سلر (مبنا): {top_bonus:,.0f} تومان")
-                potential_bonus_amount += top_bonus
-            
-            # --- APPLY COLLECTION RATIO ---
-            payable_bonus_amount = potential_bonus_amount * person_collection_ratio
-            
-            # Update Data Structure
-            p_data['potential_bonus'] = potential_bonus_amount # New Field for report
-            p_data['additional_bonus'] = payable_bonus_amount  # This is what gets paid (Corrected)
-            p_data['total_commission'] += payable_bonus_amount
-            
-            if potential_bonus_amount > 0:
-                bonus_details_header = "\n" + ("-"*10) + " جزئیات پاداش (اصلاح شده) " + ("-"*10)
-                bonus_details_list.insert(0, bonus_details_header)
-                bonus_details_list.append(f"مجموع پاداش بالقوه (مبنا): {potential_bonus_amount:,.0f} تومان")
-                bonus_details_list.append(f"درصد وصولی کل ماه: {person_collection_ratio:.2%}")
-                bonus_details_list.append(f"پاداش قابل پرداخت: {payable_bonus_amount:,.0f} تومان")
-                
-                bonus_details_str = "\n".join(bonus_details_list)
-                for txn in p_data['transactions']:
-                    txn['calculation_details'] += bonus_details_str
-                    
-    logging.info("--- Pass 3 Finished (With Collection Ratio Logic). ---")
+            p['bonus_base'] = potential_bonus # In old logic, base and acceptable are the same
+            p['bonus_acceptable'] = potential_bonus
+            p['bonus_collected'] = payable_bonus
+            p['monthly_collection_ratio'] = person_ratio
+
+            logger.info(f"  User {name}: Potential Bonus={potential_bonus:,.0f} {reasons} | Simple Ratio={person_ratio:.1%} | Payable Bonus={payable_bonus:,.0f}")
+
     return results, config
 
+# ==============================================================================
+# SUMMARIZATION (Adapted for Reverted Logic)
+# ==============================================================================
+
 def summarize_results(results, commissions_paid_df, config):
+    logger = logging.getLogger(__name__)
+    logger.info("\n>>> SUMMARIZATION (Reverted Logic): Preparing Database Records")
+    
     summary = {}
+    
     paid_summary = {}
     if commissions_paid_df is not None and not commissions_paid_df.empty:
-        paid_summary = (pd.to_numeric(commissions_paid_df['مبلغ پرداخت شده'].astype(str).str.replace(',', ''), errors='coerce').fillna(0).groupby(commissions_paid_df['نام']).sum() * config.CURRENCY_CONVERSION_FACTOR).to_dict()
-    
-    for month_data in results.values():
-        for person_name, person_data in month_data.get('persons', {}).items():
-            person_summary = summary.setdefault(person_name, {
-                'person_name': person_name,
-                'commission_model': person_data.get('model'),
-                'total_original_commission': 0,
-                'total_additional_bonus': 0,
-                'total_full_commission': 0,
-                'total_pending_commission': 0
-            })
+        commissions_paid_df['normalized_name'] = commissions_paid_df['نام'].apply(_normalize_text)
+        commissions_paid_df['clean_amount'] = pd.to_numeric(commissions_paid_df['مبلغ پرداخت شده'].astype(str).str.replace(',', ''), errors='coerce').fillna(0) * config.CURRENCY_CONVERSION_FACTOR
+        paid_summary = commissions_paid_df.groupby('normalized_name')['clean_amount'].sum().to_dict()
+
+    for month_key, month_data in results.items():
+        for person_name, person_data in month_data['persons'].items():
             
-            # Note: total_commission now includes the bonus, so we subtract additional_bonus to get original
-            original_commission = person_data['total_commission'] - person_data.get('additional_bonus', 0)
-            person_summary['total_original_commission'] += original_commission
-            person_summary['total_additional_bonus'] += person_data.get('additional_bonus', 0)
+            if person_name not in summary:
+                summary[person_name] = {
+                    'person_name': person_name, 'commission_model': person_data.get('model'),
+                    'total_declared': 0, 'total_base': 0, 'total_acceptable': 0,
+                    'commission_base': 0, 'commission_acceptable': 0, 'commission_collected': 0,
+                    'bonus_base': 0, 'bonus_acceptable': 0, 'bonus_collected': 0,
+                }
+            
+            s = summary[person_name]
+            
+            for txn in person_data['transactions']:
+                s['total_declared'] += txn['net_value']
+                s['total_base'] += txn['commission_base']
+                if txn['is_acceptable']:
+                    s['total_acceptable'] += txn['commission_base']
+                
+                s['commission_base'] += txn['full_commission']
+                s['commission_acceptable'] += txn['acceptable_commission']
+                s['commission_collected'] += txn['payable_commission']
+            
+            s['bonus_base'] += person_data.get('bonus_base', 0)
+            s['bonus_acceptable'] += person_data.get('bonus_acceptable', 0)
+            s['bonus_collected'] += person_data.get('bonus_collected', 0)
 
-            full_commission_monthly = sum(txn.get('full_commission', 0) for txn in person_data['transactions'])
-            pending_commission_monthly = sum(txn.get('commission_remaining', 0) for txn in person_data['transactions'])
-            person_summary['total_full_commission'] += full_commission_monthly
-            person_summary['total_pending_commission'] += pending_commission_monthly
-
-    for person_name, data in summary.items():
-        data['total_payable_commission'] = data['total_original_commission'] + data['total_additional_bonus']
-        data['total_paid_commission'] = paid_summary.get(person_name, 0)
-        data['remaining_balance'] = data['total_payable_commission'] - data['total_paid_commission']
+    for name, data in summary.items():
+        data['payable_amount'] = data['commission_collected'] + data['bonus_collected']
+        data['total_paid_commission'] = paid_summary.get(name, 0)
         
-    logging.info(f"--- Summarization complete. Generated summary for {len(summary)} people. ---")
+        data['remaining_acceptable'] = (data['commission_acceptable'] + data['bonus_acceptable']) - data['payable_amount']
+        data['remaining_base'] = (data['commission_base'] + data['bonus_base']) - data['payable_amount']
+        
+        data['remaining_balance'] = data['payable_amount'] - data['total_paid_commission']
+        data['total_original_commission'] = data['commission_acceptable']
+        data['total_additional_bonus'] = data['bonus_collected']
+        data['total_payable_commission'] = data['payable_amount']
+        
+        logger.info(f"Summary for {name}: Payable={data['payable_amount']:,.0f}, Paid={data['total_paid_commission']:,.0f}, Balance={data['remaining_balance']:,.0f}")
+
+    logger.info("### ENGINE FINISHED (REVERTED LOGIC) ###")
     return summary
 # end of app/calculator/engine.py

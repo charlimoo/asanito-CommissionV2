@@ -1,3 +1,4 @@
+# start of app/models.py
 # ==============================================================================
 # app/models.py
 # ------------------------------------------------------------------------------
@@ -25,8 +26,8 @@ class CalculationRun(db.Model):
     # Column to store the full, detailed report as a JSON string
     detailed_results_json = db.Column(db.Text, nullable=True)
     targets_json = db.Column(db.Text, nullable=True)
+    
     # Relationship: One CalculationRun has many PersonResults.
-    # If a run is deleted, all its associated results are also deleted.
     person_results = db.relationship('PersonResult', backref='calculation_run', lazy='dynamic', cascade="all, delete-orphan")
 
     def __repr__(self):
@@ -35,24 +36,62 @@ class CalculationRun(db.Model):
 class PersonResult(db.Model):
     """
     Stores the final summarized results for each person for a specific run.
+    Updated to include the 12-column logic for the new reporting standards.
     """
     __tablename__ = 'person_result'
     id = db.Column(db.Integer, primary_key=True)
     person_name = db.Column(db.String(128), index=True, nullable=False)
     commission_model = db.Column(db.String(64))
     
+    # --- 1. The Input Metrics ---
+    # کل اعلامی: Total invoice amount before changes
+    total_declared = db.Column(db.Float, default=0)
+    # کل مبنا: Total commissionable base (after exclusions)
+    total_base = db.Column(db.Float, default=0)
+    # کل قابل قبول: Total base of deals that met the 30% + Min Value threshold
+    total_acceptable = db.Column(db.Float, default=0)
+    
+    # --- 2. Commission Metrics ---
+    # پورسانت بر اساس کل مبنا: Potential commission ignoring thresholds
+    commission_base = db.Column(db.Float, default=0)
+    # پورسانت قابل قبول: Commission on acceptable deals only
+    commission_acceptable = db.Column(db.Float, default=0)
+    # پورسانت وصول شده: Acceptable Commission * Collection Ratio
+    commission_collected = db.Column(db.Float, default=0)
+    
+    # --- 3. Bonus Metrics ---
+    # پاداش مبنا: Bonus calculated on Total Base
+    bonus_base = db.Column(db.Float, default=0)
+    # پاداش قابل قبول: Bonus calculated on Total Acceptable
+    bonus_acceptable = db.Column(db.Float, default=0)
+    # پاداش وصول شده: Cash portion of the bonus
+    bonus_collected = db.Column(db.Float, default=0)
+    
+    # --- 4. Final Aggregates ---
+    # قابل پرداخت: commission_collected + bonus_collected
+    payable_amount = db.Column(db.Float, default=0)
+    # مبلغ پرداخت شده (Manually entered from Excel)
+    total_paid_commission = db.Column(db.Float, default=0)
+    
+    # مانده دریافتی وصول قابل قبول
+    # (commission_acceptable + bonus_acceptable) - payable_amount
+    # Note: In the context of "Remaining Balance", usually it is (Payable - Paid).
+    # But strictly following the prompt's definition:
+    remaining_acceptable = db.Column(db.Float, default=0)
+    
+    # مانده دریافتی وصول مبنا
+    # (commission_base + bonus_base) - payable_amount
+    remaining_base = db.Column(db.Float, default=0)
+    
+    # Legacy fields (kept for backward compatibility if needed, though replaced by above)
     total_original_commission = db.Column(db.Float, default=0)
     total_additional_bonus = db.Column(db.Float, default=0)
-    total_payable_commission = db.Column(db.Float, default=0)
-    total_paid_commission = db.Column(db.Float, default=0)
-    remaining_balance = db.Column(db.Float, default=0)
-    
-    # --- ADDED FIELDS ---
-    total_full_commission = db.Column(db.Float, default=0) # Potential commission at 100% collection
-    total_pending_commission = db.Column(db.Float, default=0) # Commission waiting on collection
-    # --- END OF ADDED FIELDS ---
-    
-    # Foreign Key to link back to the CalculationRun
+    total_payable_commission = db.Column(db.Float, default=0) # Same as payable_amount
+    total_full_commission = db.Column(db.Float, default=0)
+    total_pending_commission = db.Column(db.Float, default=0)
+    remaining_balance = db.Column(db.Float, default=0) # Usually (payable - paid)
+
+    # Foreign Key
     calculation_run_id = db.Column(db.Integer, db.ForeignKey('calculation_run.id'), nullable=False)
 
     def __repr__(self):
@@ -61,7 +100,6 @@ class PersonResult(db.Model):
 class CommissionRuleSet(db.Model):
     """
     Stores the commission brackets for each employment model.
-    This table is managed via the Admin Panel.
     """
     __tablename__ = 'commission_rule_set'
     id = db.Column(db.Integer, primary_key=True)
@@ -78,40 +116,34 @@ class CommissionRuleSet(db.Model):
 class MonthlyTarget(db.Model):
     """
     Stores the monthly targets for bonus calculations.
-    This table is managed via the Admin Panel.
     """
     __tablename__ = 'monthly_target'
     id = db.Column(db.Integer, primary_key=True)
     year = db.Column(db.Integer, nullable=False)
     month = db.Column(db.Integer, nullable=False)
-    collective_target = db.Column(db.Float, default=0) # Stored in Rials
-    individual_target = db.Column(db.Float, default=0) # Stored in Rials
+    collective_target = db.Column(db.Float, default=0)
+    individual_target = db.Column(db.Float, default=0)
     
-    # Ensure that there can only be one target entry per year/month combination
     __table_args__ = (db.UniqueConstraint('year', 'month', name='_year_month_uc'),)
 
     def __repr__(self):
         return f'<MonthlyTarget {self.year}-{self.month}>'
     
-    
 class AppSetting(db.Model):
     """
-    Stores key-value pairs for all application settings and business rules
-    that were previously hardcoded. This makes the entire application
-    configurable through the admin panel.
+    Stores key-value pairs for application settings.
     """
     __tablename__ = 'app_setting'
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(128), unique=True, nullable=False, index=True)
     value = db.Column(db.String(256), nullable=False)
-    description = db.Column(db.String(512)) # For hints in the admin panel
-    value_type = db.Column(db.String(32), default='string') # e.g., 'float', 'int', 'string', 'json'
+    description = db.Column(db.String(512))
+    value_type = db.Column(db.String(32), default='string')
 
     def __repr__(self):
         return f'<AppSetting {self.key}: {self.value}>'
 
     def get_value(self):
-        """Casts the string value to its correct Python type."""
         if self.value_type == 'float':
             return float(self.value)
         if self.value_type == 'int':
@@ -122,22 +154,20 @@ class AppSetting(db.Model):
     
 class User(db.Model):
     """
-    Stores user credentials for accessing personalized reports.
+    Stores user credentials.
     """
     __tablename__ = 'user'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), index=True, unique=True, nullable=False)
     password_hash = db.Column(db.String(256))
-    # This 'name' field MUST EXACTLY MATCH the name in the Excel file's sales data sheets.
     name = db.Column(db.String(128), index=True, unique=True, nullable=False)
 
     def set_password(self, password):
-        """Hashes and sets the user's password."""
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
-        """Checks if the provided password matches the stored hash."""
         return check_password_hash(self.password_hash, password)
 
     def __repr__(self):
         return f'<User {self.username}>'
+# end of app/models.py

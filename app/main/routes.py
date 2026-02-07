@@ -1,8 +1,9 @@
+# start of app/main/routes.py
 # ==============================================================================
 # app/main/routes.py
 # ------------------------------------------------------------------------------
 # Defines all user-facing routes for the main application blueprint.
-# This file acts as the main controller for the web interface.
+# Updated to handle the specific 12-column report structure (Declared, Base, Acceptable, etc.)
 # ==============================================================================
 
 import os
@@ -46,7 +47,7 @@ def admin_required(f):
 
 @bp.route('/', methods=['GET', 'POST'])
 def index():
-    """Handles the main page with the file uploader."""
+    """Handles the main page with the file uploader and triggers calculation."""
     if request.method == 'POST':
         if 'file' not in request.files:
             flash('هیچ فایلی در درخواست وجود ندارد.', 'danger')
@@ -63,6 +64,7 @@ def index():
             os.makedirs(current_app.config['UPLOAD_FOLDER'], exist_ok=True)
             file.save(filepath)
 
+            # 1. Validate the Excel file
             dataframes, errors = validate_excel_file(filepath)
             if errors:
                 for error in errors:
@@ -70,15 +72,21 @@ def index():
                 return redirect(request.url)
             
             try:
+                # 2. Run the Calculation Engine
                 results, config = calculate_commissions(dataframes)
+                
+                # 3. Summarize the results for DB storage
                 summary_data = summarize_results(results, dataframes.get('Commissions paid'), config)
 
+                # Determine Report Period String
                 months_in_report = sorted(results.keys())
                 period_string = f"{months_in_report[0]} to {months_in_report[-1]}" if months_in_report else "N/A"
 
+                # Prepare Targets JSON
                 targets_df = dataframes.get('Additional commissions')
                 targets_json_str = targets_df.to_json(orient='records') if targets_df is not None else '[]'
 
+                # 4. Create CalculationRun Record
                 new_run = CalculationRun(
                     filename=filename,
                     report_period=period_string,
@@ -87,18 +95,46 @@ def index():
                     targets_json=targets_json_str
                 )
                 db.session.add(new_run)
-                db.session.flush()
+                db.session.flush() # Get ID for new_run
 
+                # 5. Create PersonResult Records (Mapping new 12-column structure)
                 for person_name, data in summary_data.items():
                     person_result = PersonResult(
-                        person_name=person_name, commission_model=data['commission_model'],
-                        total_original_commission=data['total_original_commission'],
-                        total_additional_bonus=data['total_additional_bonus'],
-                        total_payable_commission=data['total_payable_commission'],
-                        total_paid_commission=data['total_paid_commission'],
-                        total_full_commission=data['total_full_commission'],
-                        total_pending_commission=data['total_pending_commission'],
-                        remaining_balance=data['remaining_balance'], calculation_run_id=new_run.id
+                        person_name=person_name, 
+                        commission_model=data['commission_model'],
+                        
+                        # --- Input Metrics ---
+                        total_declared=data.get('total_declared', 0),
+                        total_base=data.get('total_base', 0),
+                        total_acceptable=data.get('total_acceptable', 0),
+                        
+                        # --- Commission Metrics ---
+                        commission_base=data.get('commission_base', 0),
+                        commission_acceptable=data.get('commission_acceptable', 0),
+                        commission_collected=data.get('commission_collected', 0),
+                        
+                        # --- Bonus Metrics ---
+                        bonus_base=data.get('bonus_base', 0),
+                        bonus_acceptable=data.get('bonus_acceptable', 0),
+                        bonus_collected=data.get('bonus_collected', 0),
+                        
+                        # --- Final Aggregates ---
+                        payable_amount=data.get('payable_amount', 0),
+                        total_paid_commission=data.get('total_paid_commission', 0), # Manual payments
+                        
+                        # --- Remaining Balances ---
+                        remaining_acceptable=data.get('remaining_acceptable', 0),
+                        remaining_base=data.get('remaining_base', 0),
+                        
+                        # --- Legacy Fields (Populated for backward compatibility) ---
+                        total_original_commission=data.get('total_original_commission', 0),
+                        total_additional_bonus=data.get('total_additional_bonus', 0),
+                        total_payable_commission=data.get('payable_amount', 0),
+                        total_full_commission=data.get('total_full_commission', 0),
+                        total_pending_commission=data.get('total_pending_commission', 0),
+                        remaining_balance=data.get('remaining_balance', 0),
+                        
+                        calculation_run_id=new_run.id
                     )
                     db.session.add(person_result)
                 
@@ -128,7 +164,7 @@ def history():
         run.users = User.query.filter(User.name.in_(run.person_names)).all()
     return render_template('history.html', runs=runs)
 
-# --- NEW REPORTING AND LOGIN FLOW ---
+# --- REPORTING AND LOGIN FLOW ---
 
 @bp.route('/login/<public_id>/<username>', methods=['GET', 'POST'])
 def user_login(public_id, username):
@@ -155,23 +191,20 @@ def user_login(public_id, username):
 @bp.route('/report/<public_id>/<username>')
 def view_user_report(public_id, username):
     """Displays a filtered, secure report for a single user."""
-    # --- DEBUG LOG ---
+    # Session Security Check
     current_app.logger.info("="*50)
     current_app.logger.info(f"ENTERING 'view_user_report' for user: '{username}', report: '{public_id}'")
     
     if session.get('report_access_user') != username or session.get('report_access_id') != public_id:
-        # --- DEBUG LOG ---
         current_app.logger.warning(f"SESSION CHECK FAILED! Session user: '{session.get('report_access_user')}', Session report: '{session.get('report_access_id')}'")
         flash('برای مشاهده این گزارش ابتدا باید وارد شوید.', 'warning')
         return redirect(url_for('main.user_login', public_id=public_id, username=username))
 
-    # --- DEBUG LOG ---
     current_app.logger.info("Session check PASSED.")
     
     run = CalculationRun.query.filter_by(public_id=public_id).first_or_404()
     user = User.query.filter_by(username=username).first_or_404()
     
-    # --- DEBUG LOG ---
     current_app.logger.info(f"Successfully fetched User object. User's full name from DB is: '{user.name}'")
     
     if not run.detailed_results_json:
@@ -181,25 +214,40 @@ def view_user_report(public_id, username):
     full_results = json.loads(run.detailed_results_json)
     all_person_results = PersonResult.query.filter_by(calculation_run_id=run.id).all()
     
-    # --- DEBUG LOG ---
+    # Check if user exists in the report
     all_names_in_report = [p.person_name for p in all_person_results]
-    current_app.logger.info(f"All person names found in this report's PersonResult table: {all_names_in_report}")
-    
-    # --- THIS IS THE MOST IMPORTANT CHECK ---
     user_name_to_filter = user.name
     user_has_data = user_name_to_filter in all_names_in_report
-    # --- DEBUG LOG ---
-    current_app.logger.info(f"The name to filter by is: '{user_name_to_filter}'")
-    current_app.logger.info(f"Is the user's name in the report's list of people? {'YES' if user_has_data else 'NO'}")
-
+    
     if not user_has_data:
         flash(f'اطلاعاتی برای کاربر "{user.name}" در این گزارش یافت نشد.', 'warning')
         return redirect(url_for('main.index'))
         
+    # Reconstruct Summary Data Dictionary from DB for the Frontend
     full_summary_data = {}
     for res in all_person_results:
         full_summary_data[res.person_name] = {
-            'person_name': res.person_name, 'commission_model': res.commission_model,
+            'person_name': res.person_name, 
+            'commission_model': res.commission_model,
+            
+            # New 12-Column Metrics
+            'total_declared': res.total_declared,
+            'total_base': res.total_base,
+            'total_acceptable': res.total_acceptable,
+            
+            'commission_base': res.commission_base,
+            'commission_acceptable': res.commission_acceptable,
+            'commission_collected': res.commission_collected,
+            
+            'bonus_base': res.bonus_base,
+            'bonus_acceptable': res.bonus_acceptable,
+            'bonus_collected': res.bonus_collected,
+            
+            'payable_amount': res.payable_amount,
+            'remaining_acceptable': res.remaining_acceptable,
+            'remaining_base': res.remaining_base,
+            
+            # Legacy Fields
             'total_original_commission': res.total_original_commission,
             'total_additional_bonus': res.total_additional_bonus,
             'total_payable_commission': res.total_payable_commission,
@@ -210,6 +258,8 @@ def view_user_report(public_id, username):
         }
     
     targets_df = pd.read_json(run.targets_json, orient='records') if run.targets_json else pd.DataFrame()
+    
+    # Prepare data for rendering
     frontend_data = prepare_frontend_data(
         full_results, 
         full_summary_data, 
@@ -217,7 +267,6 @@ def view_user_report(public_id, username):
         filter_person_name=user.name
     )
     
-    # --- DEBUG LOG ---
     current_app.logger.info(f"Data prepared for template. Number of people in final data: {len(frontend_data['personList'])}")
     current_app.logger.info("="*50)
     
@@ -232,16 +281,8 @@ def view_user_report(public_id, username):
         is_user_view=True
     )
 
-# --- DEPRECATED/OLD ROUTES ---
-@bp.route('/report/<int:run_id>')
-def view_report(run_id):
-    flash('این لینک گزارش منقضی شده است. لطفاً از لینک‌های جدید در صفحه تاریخچه استفاده کنید.', 'info')
-    if session.get('admin_logged_in'):
-        return redirect(url_for('main.history'))
-    return redirect(url_for('main.index'))
-
-# ... [The rest of the routes.py file is unchanged from before] ...
 # --- Admin Panel Routes ---
+
 @bp.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
     """Handles admin login."""
@@ -284,10 +325,32 @@ def admin_master_report(public_id):
 
     results = json.loads(run.detailed_results_json)
     person_results_query = PersonResult.query.filter_by(calculation_run_id=run.id).all()
+    
+    # Reconstruct Summary Data Dictionary from DB
     summary_data = {}
     for res in person_results_query:
         summary_data[res.person_name] = {
-            'person_name': res.person_name, 'commission_model': res.commission_model,
+            'person_name': res.person_name, 
+            'commission_model': res.commission_model,
+            
+            # New 12-Column Metrics
+            'total_declared': res.total_declared,
+            'total_base': res.total_base,
+            'total_acceptable': res.total_acceptable,
+            
+            'commission_base': res.commission_base,
+            'commission_acceptable': res.commission_acceptable,
+            'commission_collected': res.commission_collected,
+            
+            'bonus_base': res.bonus_base,
+            'bonus_acceptable': res.bonus_acceptable,
+            'bonus_collected': res.bonus_collected,
+            
+            'payable_amount': res.payable_amount,
+            'remaining_acceptable': res.remaining_acceptable,
+            'remaining_base': res.remaining_base,
+            
+            # Legacy Fields
             'total_original_commission': res.total_original_commission,
             'total_additional_bonus': res.total_additional_bonus,
             'total_payable_commission': res.total_payable_commission,
@@ -298,6 +361,8 @@ def admin_master_report(public_id):
         }
     
     targets_df = pd.read_json(run.targets_json, orient='records') if run.targets_json else pd.DataFrame()
+    
+    # Prepare data
     frontend_data = prepare_frontend_data(results, summary_data, targets_df)
     
     return render_template(
@@ -396,6 +461,7 @@ def edit_setting(setting_id):
                 return render_template('admin_form.html', form=form, title=f'ویرایش تنظیم: {setting.key}', description=setting.description)
         setting.value = new_value
         db.session.commit()
+        # Invalidate Config Cache
         from app.calculator.engine import CalculationConfig
         CalculationConfig._instance = None
         flash(f'تنظیم "{setting.key}" با موفقیت ویرایش شد و حافظه نهان (cache) کانفیگ پاک شد.', 'success')
@@ -456,3 +522,4 @@ def delete_user(user_id):
     db.session.commit()
     flash(f'کاربر "{user.username}" حذف شد.', 'success')
     return redirect(url_for('main.manage_users'))
+# end of app/main/routes.py
